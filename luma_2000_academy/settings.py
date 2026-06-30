@@ -26,8 +26,6 @@ SECRET_KEY = 'django-insecure-s-u_cvk3$me^k4_$lt(pidmnq7g-o%sdi^nsz*oy&2!jakxc-l
 DEBUG = False
 
 ALLOWED_HOSTS = [
-    '127.0.0.1',
-    'localhost',
     'ryacksonfungo.alwaysdata.net',
 ]
 

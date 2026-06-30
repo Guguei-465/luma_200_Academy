@@ -13,7 +13,7 @@ class Fee(models.Model):
     term = models.CharField(max_length=20)
     year = models.IntegerField()
 
-    receipt_no = models.CharField(max_length=50, unique=True)
+    receipt_no = models.CharField(max_length=50, unique=True)    
     date_paid = models.DateField()
 
     created_at = models.DateTimeField(auto_now_add=True)
