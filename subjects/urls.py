@@ -1,7 +1,16 @@
-from rest_framework.routers import DefaultRouter
-from .views import SubjectViewSet
+from django.urls import path
+from .views import (
+    SubjectListView,
+    SubjectDetailView,
+    SubjectCreateView,
+    SubjectUpdateView,
+    SubjectDeleteView,
+)
 
-router = DefaultRouter()
-router.register(r'subjects', SubjectViewSet)
-
-urlpatterns = router.urls 
+urlpatterns = [
+    path("", SubjectListView.as_view(), name="subject-list"),
+    path("<int:pk>/", SubjectDetailView.as_view(), name="subject-detail"),
+    path("create/", SubjectCreateView.as_view(), name="subject-create"),
+    path("update/<int:pk>/", SubjectUpdateView.as_view(), name="subject-update"),
+    path("delete/<int:pk>/", SubjectDeleteView.as_view(), name="subject-delete"),
+] 

@@ -1,0 +1,50 @@
+from django.urls import path
+from .views import DashboardAPIView, DashboardFeeSummaryAPIView, ExamPerformanceDashboardAPIView, RecentAdmissionsAPIView, RecentFeePaymentsAPIView, TodayAttendanceSummaryAPIView, TopOutstandingStudentsAPIView, TopPerformingClassesAPIView, UpcomingNotificationsAPIView 
+
+urlpatterns = [
+      path(
+        "",
+        DashboardAPIView.as_view(),
+        name="dashboard",
+    ),
+    path(
+        "top-students/",
+        TopOutstandingStudentsAPIView.as_view(),
+        name="top-students",
+    ),
+    path(
+        "top-classes/",
+        TopPerformingClassesAPIView.as_view(),
+        name="top-performing-classes",
+    ),
+    path(
+        "recent-payments/",
+        RecentFeePaymentsAPIView.as_view(),
+        name="recent-fee-payments",
+    ),
+    path(
+        "recent-admissions/",
+        RecentAdmissionsAPIView.as_view(),
+        name="recent-admissions",
+    ),
+    path(
+        "attendance/today/",
+        TodayAttendanceSummaryAPIView.as_view(),
+        name="today-attendance-summary",
+    ),
+    path(
+        "fees/summary/",
+        DashboardFeeSummaryAPIView.as_view(),
+        name="dashboard-fee-summary",
+    ),
+    path(
+        "exam-performance/",
+        ExamPerformanceDashboardAPIView.as_view(),
+        name="exam-performance-dashboard",
+    ),
+    path(
+        "notifications/",
+        UpcomingNotificationsAPIView.as_view(),
+        name="dashboard-notifications",
+    ),
+]  

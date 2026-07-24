@@ -9,8 +9,11 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
+from decouple import config
 
 from pathlib import Path
+
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,16 +26,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-s-u_cvk3$me^k4_$lt(pidmnq7g-o%sdi^nsz*oy&2!jakxc-l'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
+
+# users to have acounts
+AUTH_USER_MODEL = "accounts.CustomUser"
 
 ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
     'ryacksonfungo.alwaysdata.net',
-]
+] 
+
+
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    'django_filters',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -40,13 +51,31 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    # apps
-    'corsheaders',
     'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
+    'drf_spectacular',
+    'corsheaders',
+    
+
+    # apps
+    'notifiations',
+    'assignments',
     'students',
     'teachers',
     'subjects',
-    'fees'
+    'fees',
+    'classes',
+    'accounts',
+    'parents',
+    'attendance',
+    'exams',
+    'results',
+    'timetable',
+    'anouncements',
+    'dashboard',
+    'reports',
+    'cores',
     
 ]
 
@@ -87,13 +116,13 @@ WSGI_APPLICATION = 'luma_2000_academy.wsgi.application'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'ryacksonfungo_luma',
-        'USER': 'ryacksonfungo',
-        'PASSWORD': 'modcom2026',
-        'HOST': 'mysql-ryacksonfungo.alwaysdata.net',
-        'PORT': '3306',
+    "default": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": "ryacksonfungo_luma2000",
+        "USER": "ryacksonfungo",
+        "PASSWORD": "modcom2026",
+        "HOST": "mysql-ryacksonfungo.alwaysdata.net",
+        "PORT": "3306",
     }
 }
 
@@ -139,3 +168,43 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+ 
+
+# token
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+    ],
+}   
+
+# JWT settings
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=60),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": True,
+}
+
+
+# ==========================================
+# Safaricom Daraja Configuration
+# ==========================================
+
+MPESA_ENVIRONMENT = config("MPESA_ENVIRONMENT")
+
+MPESA_CONSUMER_KEY = config("MPESA_CONSUMER_KEY")
+MPESA_CONSUMER_SECRET = config("MPESA_CONSUMER_SECRET")
+
+MPESA_SHORTCODE = config("MPESA_SHORTCODE")
+MPESA_PASSKEY = config("MPESA_PASSKEY")
+
+MPESA_CALLBACK_URL = config("MPESA_CALLBACK_URL")
