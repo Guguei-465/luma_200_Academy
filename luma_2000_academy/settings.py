@@ -10,8 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 from decouple import config
-
+import os
+from dotenv import load_dotenv
 from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / ".env")
 
 
 
@@ -31,11 +35,11 @@ DEBUG = True
 # users to have acounts
 AUTH_USER_MODEL = "accounts.CustomUser"
 
-ALLOWED_HOSTS = [
-    '127.0.0.1',
-    'localhost',
-    'ryacksonfungo.alwaysdata.net',
-] 
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+DEBUG = os.getenv("DEBUG", "False") == "True"
+
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
 
 
@@ -117,12 +121,12 @@ WSGI_APPLICATION = 'luma_2000_academy.wsgi.application'
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "ryacksonfungo_luma2000",
-        "USER": "ryacksonfungo",
-        "PASSWORD": "modcom2026",
-        "HOST": "mysql-ryacksonfungo.alwaysdata.net",
-        "PORT": "3306",
+        "ENGINE": os.getenv("DB_ENGINE"),
+        "NAME": os.getenv("DB_NAME"),
+        "USER": os.getenv("DB_USER"),
+        "PASSWORD": os.getenv("DB_PASSWORD"),
+        "HOST": os.getenv("DB_HOST"),
+        "PORT": os.getenv("DB_PORT"),
     }
 }
 
