@@ -1,127 +1,50 @@
 from django.urls import path
-from .views import DashboardAPIView, DashboardFeeSummaryAPIView, ExamPerformanceDashboardAPIView, RecentAdmissionsAPIView, RecentFeePaymentsAPIView, TodayAttendanceSummaryAPIView, TopOutstandingStudentsAPIView, TopPerformingClassesAPIView, UpcomingNotificationsAPIView 
+from .views import (
+    DashboardAPIView,
+    DashboardFeeSummaryAPIView,
+    ExamPerformanceDashboardAPIView,
+    RecentAdmissionsAPIView,
+    RecentFeePaymentsAPIView,
+    TodayAttendanceSummaryAPIView,
+    TopOutstandingStudentsAPIView,
+    TopPerformingClassesAPIView,
+    UpcomingNotificationsAPIView,
+    ParentDashboardAPIView,
+    ParentChildrenAPIView,
+    ParentChildDetailsAPIView,
+    TeacherDashboardAPIView,
+    TeacherStudentsAPIView,
+    TeacherStudentDetailsAPIView,
+    TeacherStudentResultsAPIView,
+    TeacherUpdateStudentResultAPIView,
+    TeacherAssessmentListAPIView,
+    TeacherAssessmentDetailsAPIView,
+    TeacherSaveAssessmentMarksAPIView,
+)
 
 urlpatterns = [
-      path(
-        "",
-        DashboardAPIView.as_view(),
-        name="dashboard",
-    ),
-    path(
-        "top-students/",
-        TopOutstandingStudentsAPIView.as_view(),
-        name="top-students",
-    ),
-    path(
-        "top-classes/",
-        TopPerformingClassesAPIView.as_view(),
-        name="top-performing-classes",
-    ),
-    path(
-        "recent-payments/",
-        RecentFeePaymentsAPIView.as_view(),
-        name="recent-fee-payments",
-    ),
-    path(
-        "recent-admissions/",
-        RecentAdmissionsAPIView.as_view(),
-        name="recent-admissions",
-    ),
-    path(
-        "attendance/today/",
-        TodayAttendanceSummaryAPIView.as_view(),
-        name="today-attendance-summary",
-    ),
-    path(
-        "fees/summary/",
-        DashboardFeeSummaryAPIView.as_view(),
-        name="dashboard-fee-summary",
-    ),
-    path(
-        "exam-performance/",
-        ExamPerformanceDashboardAPIView.as_view(),
-        name="exam-performance-dashboard",
-    ),
-    path(
-        "notifications/",
-        UpcomingNotificationsAPIView.as_view(),
-        name="dashboard-notifications",
-    ),
-    path(
-        "teacher/assessments/<int:pk>/",
-        TeacherAssessmentDetailsAPIView.as_view(),
-        name="teacher-assessment-details",
-    )
-    p
-    path(
-        "teacher/assessments/",
-        TeacherAssessmentListAPIView.as_view(),
-        name="teacher-assessment-list",
-    ),
-    path(
-        "teacher/subjects/",
-        TeacherSubjectsAPIView.as_view(),
-        name="teacher-subjects",
-    ),
-    path(
-        "teacher/classes/",
-        TeacherClassesAPIView.as_view(),
-        name="teacher-classes",
-    ),
-    path(
-        "teacher/profile/",
-        TeacherProfileAPIView.as_view(),
-        name="teacher-profile",
-    ),
-    path(
-        "teacher/assessment/<int:pk>/submit/",
-        TeacherAssessmentSubmitAPIView.as_view(),
-        name="teacher-assessment-submit",
-    ),
-    path(
-        "teacher/assessment/<int:pk>/",
-        TeacherAssessmentDetailsAPIView.as_view(),
-        name="teacher-assessment-details",
-    ),
-    path(
-        "student/profile/",
-        StudentProfileAPIView.as_view(),
-        name="student-profile",
-    ),
-    path(
-        "student/subjects/",
-        StudentSubjectsAPIView.as_view(),
-        name="student-subjects",
-    ),
-    path(
-        "student/attendance/",
-        StudentAttendanceAPIView.as_view(),
-        name="student-attendance",
-    ),
-    path(
-        "student/fees/",
-        StudentFeesAPIView.as_view(),
-        name="student-fees",
-    ),
-    path(
-        "student/assessments/",
-        StudentAssessmentListAPIView.as_view(),
-        name="student-assessment-list",
-    ),
-    path(
-        "student/assessment/<int:pk>/",
-        StudentAssessmentDetailsAPIView.as_view(),
-        name="student-assessment-details",
-    ),
-    path(
-        "student/results/",
-        StudentResultsAPIView.as_view(),
-        name="student-results",
-    ),
-    path(
-        "student/result/<int:pk>/",
-        StudentResultDetailsAPIView.as_view(),
-        name="student-result-details",
-    ),
-    
-]  
+    path("", DashboardAPIView.as_view(), name="dashboard"),
+    path("top-students/", TopOutstandingStudentsAPIView.as_view(), name="top-students"),
+    path("top-classes/", TopPerformingClassesAPIView.as_view(), name="top-performing-classes"),
+    path("recent-payments/", RecentFeePaymentsAPIView.as_view(), name="recent-fee-payments"),
+    path("recent-admissions/", RecentAdmissionsAPIView.as_view(), name="recent-admissions"),
+    path("attendance/today/", TodayAttendanceSummaryAPIView.as_view(), name="today-attendance-summary"),
+    path("fees/summary/", DashboardFeeSummaryAPIView.as_view(), name="dashboard-fee-summary"),
+    path("exam-performance/", ExamPerformanceDashboardAPIView.as_view(), name="exam-performance-dashboard"),
+    path("notifications/", UpcomingNotificationsAPIView.as_view(), name="dashboard-notifications"),
+
+    # Parent
+    path("parent/", ParentDashboardAPIView.as_view(), name="parent-dashboard"),
+    path("parent/children/", ParentChildrenAPIView.as_view(), name="parent-children"),
+    path("parent/children/<int:id>/", ParentChildDetailsAPIView.as_view(), name="parent-child-details"),
+
+    # Teacher
+    path("teacher/", TeacherDashboardAPIView.as_view(), name="teacher-dashboard"),
+    path("teacher/students/", TeacherStudentsAPIView.as_view(), name="teacher-students"),
+    path("teacher/students/<int:pk>/", TeacherStudentDetailsAPIView.as_view(), name="teacher-student-details"),
+    path("teacher/students/<int:pk>/results/", TeacherStudentResultsAPIView.as_view(), name="teacher-student-results"),
+    path("teacher/results/<int:pk>/update/", TeacherUpdateStudentResultAPIView.as_view(), name="teacher-update-result"),
+    path("teacher/assessments/", TeacherAssessmentListAPIView.as_view(), name="teacher-assessment-list"),
+    path("teacher/assessments/<int:pk>/", TeacherAssessmentDetailsAPIView.as_view(), name="teacher-assessment-details"),
+    path("teacher/assessments/<int:pk>/save-marks/", TeacherSaveAssessmentMarksAPIView.as_view(), name="teacher-save-marks"),
+]

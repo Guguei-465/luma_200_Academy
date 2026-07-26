@@ -18,9 +18,7 @@ from attendance.models import Attendance
 from fees.models import FeePayment, StudentFee
 from exams.models import Exam
 from notifiations.models import Notification
-from results.models import StudentResult, StudentTermResult, ResultSubmission
-from results.utils import calculate_cbc_grade, calculate_grade, calculate_student_subject_result, calculate_student_term_result, calculate_class_positions
-from exams.models import Assessment
+from results.models import StudentResult, StudentTermResult, ResultSubmission, Assessment
 
 from .serializers import (
     AttendanceSummarySerializer,
@@ -898,7 +896,6 @@ class TeacherSaveAssessmentMarksAPIView(APIView):
                     "status": Result.ResultStatus.PRESENT,
                 },
             )
-
             calculate_student_subject_result(student, assessment)
             calculate_student_term_result(
                 student,
