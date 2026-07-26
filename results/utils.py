@@ -1,3 +1,11 @@
+from decimal import Decimal
+from django.db.models import F
+from django.db.models import Avg
+from django.db.models import Sum
+from .models import StudentTermResult
+from .models import StudentResult, Result
+
+
 def calculate_cbc_grade(score):
     """
     Calculate CBC Assessment Rubric.
@@ -28,3 +36,170 @@ def calculate_cbc_grade(score):
         return "BE2", "Below Expectation"
 
     return "N/A", "Not Assessed"
+
+
+from decimal import Decimal
+
+from .models import GradeScale
+
+
+def calculate_grade(score):
+
+    grade = GradeScale.objects.filter(
+        minimum_score__lte=Decimal(score),
+        maximum_score__gte=Decimal(score),
+    ).first()
+
+    if not grade:
+
+        return None
+
+    return grade
+
+def calculate_student_subject_result(student, assessment):
+
+    results = Result.objects.filter(
+        submission__assessment__subject=assessment.subject,
+        submission__assessment__term=assessment.term,
+        submission__assessment__academic_year=assessment.academic_year,
+        student=student,
+        status=Result.ResultStatus.PRESENT,
+    )
+    
+    if not results.exists():
+        return
+
+    average = results.aggregate(
+        Avg("marks")
+    )["marks__avg"] or Decimal("0")
+
+    grade = calculate_grade(average)
+
+    StudentResult.objects.update_or_create(
+
+        student=student,
+
+        classroom=assessment.classroom,
+
+        subject=assessment.subject,
+
+        academic_year=assessment.academic_year,
+
+        term=assessment.term,
+
+        defaults={
+
+            "average_score": average,
+
+            "total_score": average,
+
+            "grade": grade,
+
+            "cbc_code": grade.level if grade else "",
+              },
+
+    )
+
+
+def calculate_student_term_result(student, classroom, term, academic_year):
+
+    subject_results = StudentResult.objects.filter(
+        student=student,
+        classroom=classroom,
+        term=term,
+        academic_year=academic_year,
+    )
+
+    if not subject_results.exists():
+        return
+
+    total_subjects = subject_results.count()
+
+    total_marks = subject_results.aggregate(
+        Sum("average_score")
+    )["average_score__sum"] or Decimal("0")
+
+    average_marks = total_marks / total_subjects
+
+    grade = calculate_grade(average_marks)
+
+    StudentTermResult.objects.update_or_create(
+
+        student=student,
+
+        classroom=classroom,  },
+
+    )
+
+
+def calculate_student_term_result(student, classroom, term, academic_year):
+
+    subject_results = StudentResult.objects.filter(
+        student=student,
+        classroom=classroom,
+        term=term,
+        academic_year=academic_year,
+    )
+
+    if not subject_results.exists():
+        return
+
+    total_subjects = subject_results.count()
+
+    total_marks = subject_results.aggregate(
+        Sum("average_score")
+    )["average_score__sum"] or Decimal("0")
+
+    average_marks = total_marks / total_subjects
+
+    grade = calculate_grade(average_marks)
+
+    StudentTermResult.objects.update_or_create(
+
+        student=student,
+
+        classroom=classroom,
+         term=term,
+
+        academic_year=academic_year,
+
+        defaults={
+
+            "total_marks": total_marks,
+
+            "average_marks": average_marks,
+
+            "overall_grade": grade,
+
+            "cbc_code": grade.level if grade else "",
+
+            "cbc_description": grade.description if grade else "",
+
+            "total_subjects": total_subjects,
+
+        },
+
+    )
+    
+def calculate_class_positions(classroom, term, academic_year):
+
+    results = StudentTermResult.objects.filter(
+        classroom=classroom,
+        term=term,
+        academic_year=academic_year,
+    ).order_by(
+        "-average_marks",
+        "student__first_name",
+    )
+
+    position = 1
+
+    for result in results:
+
+        result.position = position
+
+        result.save(
+            update_fields=["position"]
+        )
+
+        position += 1

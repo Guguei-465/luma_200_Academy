@@ -210,6 +210,216 @@ class UpcomingNotificationSerializer(serializers.Serializer):
     created_by = serializers.CharField()
 
 
+class ParentDashboardSerializer(serializers.Serializer):
 
+    parent_name = serializers.CharField()
+
+    children_count = serializers.IntegerField()
+
+    total_fee_balance = serializers.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+    )
+
+    overall_attendance = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+    )
+
+    unread_notifications = serializers.IntegerField()
+
+    announcements = UpcomingNotificationSerializer(
+        many=True,
+    )
+
+class ParentChildSerializer(serializers.Serializer):
+
+    id = serializers.IntegerField()
+
+    photo = serializers.ImageField(
+        allow_null=True,
+    )
+
+    admission_number = serializers.CharField()
+
+    assessment_number = serializers.CharField(
+        allow_null=True,
+    )
+
+    first_name = serializers.CharField()
+
+    last_name = serializers.CharField()
+
+    grade = serializers.CharField()
+
+    stream = serializers.CharField()
+
+    class_teacher = serializers.CharField(
+        allow_null=True,
+    )
+
+    teacher_phone = serializers.CharField(
+        allow_null=True,
+    )
+    attendance_percentage = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+    )
+
+    latest_grade = serializers.CharField()
+
+    fee_balance = serializers.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+    )
+
+    status = serializers.CharField()
+
+
+class ParentChildDetailsSerializer(serializers.Serializer):
+
+    id = serializers.IntegerField()
+
+    photo = serializers.ImageField(
+        allow_null=True,
+    )
+
+    admission_number = serializers.CharField()
+
+    assessment_number = serializers.CharField(
+        allow_null=True,
+    )
+
+    first_name = serializers.CharField()
+
+    last_name = serializers.CharField()
+
+    gender = serializers.CharField()
+
+    date_of_birth = serializers.DateField()
+
+    grade = serializers.CharField()
+
+    stream = serializers.CharField()
+
+    class_teacher = serializers.CharField(
+        allow_null=True,
+    )
+    teacher_phone = serializers.CharField(
+        allow_null=True,
+    )
+
+    relationship = serializers.CharField()
+
+    date_admitted = serializers.DateField()
+
+    status = serializers.CharField()
+
+    attendance_percentage = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+    )
+
+    latest_grade = serializers.CharField()
+
+    fee_balance = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+    )
+
+
+class TeacherDashboardSerializer(serializers.Serializer):
+
+    teacher_name = serializers.CharField()
+
+    is_class_teacher = serializers.BooleanField()
+
+    assigned_classes = serializers.IntegerField()
+
+    assigned_subjects = serializers.IntegerField()
+
+    total_students = serializers.IntegerField()
+
+    today_lessons = serializers.IntegerField()
+
+    pending_results = serializers.IntegerField()
+
+class TeacherStudentSerializer(serializers.Serializer):
+
+    id = serializers.IntegerField()
+
+    photo = serializers.ImageField(
+        allow_null=True,
+    )
+
+    admission_number = serializers.CharField()
+
+    assessment_number = serializers.CharField(
+        allow_null=True,
+    )
+
+    student_name = serializers.CharField()
+
+    classroom = serializers.CharField()
+
+    gender = serializers.CharField()
+
+    status = serializers.CharField()
+
+                                                                             
+class TeacherStudentDetailsSerializer(serializers.Serializer):
+
+    id = serializers.IntegerField()
+
+    photo = serializers.ImageField(
+        allow_null=True,
+    )
+
+    admission_number = serializers.CharField()
+
+    assessment_number = serializers.CharField(
+        allow_null=True,
+    )
+
+    first_name = serializers.CharField()
+
+    last_name = serializers.CharField()
+
+    gender = serializers.CharField()
+
+    date_of_birth = serializers.DateField()
+
+    grade = serializers.CharField()
+
+    stream = serializers.CharField()
+
+    date_admitted = serializers.DateField()
+
+    parent_name = serializers.CharField()
+
+    parent_phone = serializers.CharField()
+
+    attendance_percentage = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+    )
+
+    latest_grade = serializers.CharField()
+
+    class_teacher = serializers.BooleanField()
+
+class TeacherStudentResultUpdateSerializer(
+    serializers.ModelSerializer
+):
+
+    class Meta:
+
+        model = StudentResult
+
+        fields = [
+
+            "teacher_comment",
+
+        ]
 
 

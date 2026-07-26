@@ -27,6 +27,10 @@ ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="").split(",")
 # users to have accounts
 AUTH_USER_MODEL = "accounts.CustomUser"
 
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
 
 
@@ -79,7 +83,11 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1",
+    "http://localhost",
+    "https://ryacksonfungo.alwaysdata.net",
+]
 
 ROOT_URLCONF = 'luma_2000_academy.urls'
 
@@ -172,6 +180,14 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/day",
+        "user": "1000/day",
+    },
 }   
 
 # JWT settings
