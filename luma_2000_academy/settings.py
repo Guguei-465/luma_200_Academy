@@ -56,7 +56,6 @@ INSTALLED_APPS = [
     'notifiations',
     'assignments',
     'students',
-    'teachers',
     'subjects',
     'fees',
     'classes',
@@ -69,7 +68,7 @@ INSTALLED_APPS = [
     'anouncements',
     'dashboard',
     'reports',
-    'cores',
+    
     
 ]
 
