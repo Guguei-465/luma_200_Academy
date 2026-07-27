@@ -27,10 +27,10 @@ ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="").split(",")
 # users to have accounts
 AUTH_USER_MODEL = "accounts.CustomUser"
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",
+#     "http://127.0.0.1:5173",
+# ]
 
 
 
