@@ -3,6 +3,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import TeacherProfile
 from .serializers import TeacherProfileSerializer
 from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
 from .models import TeacherAssignment
 from .serializers import TeacherAssignmentSerializer
 from accounts.permisions import IsAdminOrAcademicCoordinator
