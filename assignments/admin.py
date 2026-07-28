@@ -35,3 +35,53 @@ class TeacherAssignmentAdmin(admin.ModelAdmin):
         "-academic_year",
         "term",
     )
+
+from django.contrib import admin
+from .models import TeacherProfile
+
+
+@admin.register(TeacherProfile)
+class TeacherProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "employee_number",
+        "first_name",
+        "last_name",
+        "phone_number",
+        "employment_status",
+    )
+
+    list_filter = (
+        "employment_status",
+        "gender",
+    )
+
+    search_fields = (
+        "employee_number",
+        "first_name",
+        "last_name",
+        "national_id",
+    )from django.contrib import admin
+from .models import TeacherProfile
+
+
+@admin.register(TeacherProfile)
+class TeacherProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "employee_number",
+        "first_name",
+        "last_name",
+        "phone_number",
+        "employment_status",
+    )
+
+    list_filter = (
+        "employment_status",
+        "gender",
+    )
+
+    search_fields = (
+        "employee_number",
+        "first_name",
+        "last_name",
+        "national_id",
+    )

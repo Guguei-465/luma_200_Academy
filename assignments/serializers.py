@@ -1,5 +1,5 @@
 from rest_framework import serializers
-
+from .models import TeacherProfile
 from .models import TeacherAssignment
 
 
@@ -97,3 +97,9 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
                 )
 
         return attrs
+
+
+class TeacherProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeacherProfile
+        fields = "__all__"        

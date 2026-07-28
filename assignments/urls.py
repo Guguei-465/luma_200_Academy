@@ -6,6 +6,13 @@ from .views import (
     TeacherAssignmentUpdateView,
     TeacherAssignmentDeleteView,
 )
+from rest_framework.routers import DefaultRouter
+from .views import TeacherProfileViewSet
+
+router = DefaultRouter()
+router.register("profiles", TeacherProfileViewSet, basename="teacher-profile")
+
+urlpatterns = router.urls
 
 urlpatterns = [
     path("", TeacherAssignmentListView.as_view(), name="assignment-list"),

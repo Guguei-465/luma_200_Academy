@@ -1,6 +1,8 @@
 from rest_framework import generics, filters
 from django_filters.rest_framework import DjangoFilterBackend
-
+from .models import TeacherProfile
+from .serializers import TeacherProfileSerializer
+from rest_framework import viewsets
 from .models import TeacherAssignment
 from .serializers import TeacherAssignmentSerializer
 from accounts.permisions import IsAdminOrAcademicCoordinator
@@ -89,3 +91,10 @@ class TeacherAssignmentDeleteView(generics.DestroyAPIView):
     queryset = TeacherAssignment.objects.all()
     serializer_class = TeacherAssignmentSerializer
     permission_classes = [IsAdminOrAcademicCoordinator]
+
+
+class TeacherProfileViewSet(viewsets.ModelViewSet):
+    queryset = TeacherProfile.objects.all()
+    serializer_class = TeacherProfileSerializer
+    permission_classes = [IsAuthenticated]
+
