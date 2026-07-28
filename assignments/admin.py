@@ -1,6 +1,6 @@
 from django.contrib import admin
-from django.contrib import admin
 from .models import TeacherAssignment
+from .models import TeacherProfile
 
 
 # Register your models here.
@@ -36,8 +36,7 @@ class TeacherAssignmentAdmin(admin.ModelAdmin):
         "term",
     )
 
-from django.contrib import admin
-from .models import TeacherProfile
+
 
 
 @admin.register(TeacherProfile)
@@ -60,8 +59,8 @@ class TeacherProfileAdmin(admin.ModelAdmin):
         "first_name",
         "last_name",
         "national_id",
-    )from django.contrib import admin
-from .models import TeacherProfile
+    )
+
 
 
 @admin.register(TeacherProfile)
