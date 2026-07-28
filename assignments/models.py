@@ -1,5 +1,5 @@
 from django.db import models
-from accounts.models import TeacherProfile
+from accounts.models import TeacherProfile, CustomUser
 from classes.models import ClassRoom
 from subjects.models import Subject
 from datetime import date
