@@ -1,12 +1,9 @@
 from django.contrib import admin
-from .models import TeacherAssignment
-from .models import TeacherProfile
+from .models import TeacherAssignment, TeacherProfile
 
 
-# Register your models here.
 @admin.register(TeacherAssignment)
 class TeacherAssignmentAdmin(admin.ModelAdmin):
-
     list_display = (
         "teacher",
         "classroom",
@@ -35,32 +32,6 @@ class TeacherAssignmentAdmin(admin.ModelAdmin):
         "-academic_year",
         "term",
     )
-
-
-
-
-@admin.register(TeacherProfile)
-class TeacherProfileAdmin(admin.ModelAdmin):
-    list_display = (
-        "employee_number",
-        "first_name",
-        "last_name",
-        "phone_number",
-        "employment_status",
-    )
-
-    list_filter = (
-        "employment_status",
-        "gender",
-    )
-
-    search_fields = (
-        "employee_number",
-        "first_name",
-        "last_name",
-        "national_id",
-    )
-
 
 
 @admin.register(TeacherProfile)
