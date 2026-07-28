@@ -88,79 +88,79 @@ class TeacherAssignment(models.Model):
             f"{self.classroom}"
         )
 
-class TeacherProfile(models.Model):
-    GENDER_CHOICES = (
-        ("Male", "Male"),
-        ("Female", "Female"),
-    )
+# class TeacherProfile(models.Model):
+#     GENDER_CHOICES = (
+#         ("Male", "Male"),
+#         ("Female", "Female"),
+#     )
 
-    EMPLOYMENT_STATUS = (
-        ("Active", "Active"),
-        ("Inactive", "Inactive"),
-        ("On Leave", "On Leave"),
-        ("Retired", "Retired"),
-    )
+#     EMPLOYMENT_STATUS = (
+#         ("Active", "Active"),
+#         ("Inactive", "Inactive"),
+#         ("On Leave", "On Leave"),
+#         ("Retired", "Retired"),
+#     )
 
-    user = models.OneToOneField(
-        CustomUser,
-        on_delete=models.CASCADE,
-        related_name="teacher_profile"
-    )
+#     user = models.OneToOneField(
+#         CustomUser,
+#         on_delete=models.CASCADE,
+#         related_name="teacher_profile"
+#     )
 
-    employee_number = models.CharField(max_length=30, unique=True)
-    first_name = models.CharField(max_length=100)
-    last_name = models.CharField(max_length=100)
+#     employee_number = models.CharField(max_length=30, unique=True)
+#     first_name = models.CharField(max_length=100)
+#     last_name = models.CharField(max_length=100)
 
-    gender = models.CharField(
-        max_length=10,
-        choices=GENDER_CHOICES
-    )
+#     gender = models.CharField(
+#         max_length=10,
+#         choices=GENDER_CHOICES
+#     )
 
-    date_of_birth = models.DateField()
+#     date_of_birth = models.DateField()
 
-    national_id = models.CharField(
-        max_length=20,
-        unique=True
-    )
+#     national_id = models.CharField(
+#         max_length=20,
+#         unique=True
+#     )
 
-    phone_number = models.CharField(max_length=20)
+#     phone_number = models.CharField(max_length=20)
 
-    address = models.TextField(blank=True)
+#     address = models.TextField(blank=True)
 
-    qualification = models.CharField(max_length=150)
+#     qualification = models.CharField(max_length=150)
 
-    specialization = models.CharField(
-        max_length=150,
-        blank=True
-    )
+#     specialization = models.CharField(
+#         max_length=150,
+#         blank=True
+#     )
 
-    employment_date = models.DateField()
+#     employment_date = models.DateField()
 
-    employment_status = models.CharField(
-        max_length=20,
-        choices=EMPLOYMENT_STATUS,
-        default="Active"
-    )
+#     employment_status = models.CharField(
+#         max_length=20,
+#         choices=EMPLOYMENT_STATUS,
+#         default="Active"
+#     )
 
-    profile_picture = models.ImageField(
-        upload_to="teachers/",
-        blank=True,
-        null=True
-    )
+#     profile_picture = models.ImageField(
+#         upload_to="teachers/",
+#         blank=True,
+#         null=True
+#     )
 
-    emergency_contact_name = models.CharField(
-        max_length=100,
-        blank=True
-    )
+#     emergency_contact_name = models.CharField(
+#         max_length=100,
+#         blank=True
+#     )
 
-    emergency_contact_phone = models.CharField(
-        max_length=20,
-        blank=True
-    )
+#     emergency_contact_phone = models.CharField(
+#         max_length=20,
+#         blank=True
+#     )
 
-    created_at = models.DateTimeField(auto_now_add=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
 
-    updated_at = models.DateTimeField(auto_now=True)
+#     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return f"{self.employee_number} - {self.first_name} {self.last_name}"        
+#     def __str__(self):
+#         return f"{self.employee_number} - {self.first_name} {self.last_name}"        

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import TeacherProfile
 from .models import TeacherAssignment
-
+from accounts.models import TeacherProfile
 
 # =====================================================
 # Teacher Assignment
