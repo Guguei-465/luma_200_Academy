@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-
+from timetable.models import Timetable
 from anouncements.models import Announcement
 from dashboard.permissions import IsAcademicCoordinator, IsDashboardUser, IsSuperAdmin, IsTeacher
 from results.models import Result
@@ -36,6 +36,7 @@ from .serializers import (
     TeacherStudentSerializer,
     TeacherStudentDetailsSerializer,
     TeacherStudentResultUpdateSerializer,
+    TeacherDashboardSerializer,
 )
 
 
@@ -49,6 +50,22 @@ def is_class_teacher(user):
     return ClassRoom.objects.filter(
         class_teacher=user.teacher_profile
     ).exists()
+
+
+def calculate_grade(marks):
+    return None
+
+
+def calculate_student_subject_result(student, assessment):
+    return None
+
+
+def calculate_student_term_result(student, classroom, term, academic_year):
+    return None
+
+
+def calculate_class_positions(classroom, term, academic_year):
+    return None
 
 
 class TopOutstandingStudentsAPIView(APIView):
@@ -910,3 +927,59 @@ class TeacherSaveAssessmentMarksAPIView(APIView):
             )
 
         return Response({"message": "Marks saved successfully."})
+
+
+class TeacherDashboardAPIView(APIView):
+
+    permission_classes = [IsAuthenticated, IsTeacher]
+
+    def get(self, request):
+
+        teacher = request.user.teacher_profile
+
+        assignments = TeacherAssignment.objects.filter(
+            teacher=teacher,
+            is_active=True,
+        )
+
+        assigned_classes = assignments.values(
+            "classroom"
+        ).distinct().count()
+
+        assigned_subjects = assignments.values(
+            "subject"
+        ).distinct().count()
+
+        total_students = Student.objects.filter(
+            classroom__in=assignments.values("classroom")
+        ).distinct().count()
+
+        today = timezone.localdate().strftime("%A")
+
+        today_lessons = Timetable.objects.filter(
+            assignment__teacher=teacher,
+            day=today,
+            is_active=True,
+        ).count()
+
+        pending_results = ResultSubmission.objects.filter(
+            submitted_by=request.user,
+            approval_status__in=[
+                ResultSubmission.ApprovalStatus.DRAFT,
+                ResultSubmission.ApprovalStatus.RETURNED,
+            ],
+        ).count()
+
+        data = {
+            "teacher_name": request.user.get_full_name(),
+            "is_class_teacher": is_class_teacher(request.user),
+            "assigned_classes": assigned_classes,
+            "assigned_subjects": assigned_subjects,
+            "total_students": total_students,
+            "today_lessons": today_lessons,
+            "pending_results": pending_results,
+        }
+
+        serializer = TeacherDashboardSerializer(data)
+
+        return Response(serializer.data)

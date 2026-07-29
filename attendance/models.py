@@ -1,6 +1,6 @@
 from django.db import models
 from django.utils import timezone
-
+from assignments.models import TeacherAssignment
 from accounts.models import CustomUser
 from classes.models import ClassRoom
 from students.models import Student
@@ -16,6 +16,11 @@ class AttendanceSubmission(models.Model):
         PENDING = "Pending", "Pending"
         APPROVED = "Approved", "Approved"
         RETURNED = "Returned", "Returned"
+    assignment = models.ForeignKey(
+            TeacherAssignment,
+            on_delete=models.CASCADE,
+            related_name="attendance_submissions",
+    )
 
     classroom = models.ForeignKey(
         ClassRoom,
@@ -79,7 +84,7 @@ class AttendanceSubmission(models.Model):
         ]
 
         unique_together = (
-            "classroom",
+            "assignment",
             "date",
         )
 
@@ -87,7 +92,11 @@ class AttendanceSubmission(models.Model):
         verbose_name_plural = "Attendance Submissions"
 
     def __str__(self):
-        return f"{self.classroom} - {self.date}"
+        return (
+            f"{self.assignment.teacher.user.get_full_name()} - "
+            f"{self.classroom} - "
+            f"{self.date}"
+        )
 
 
 # =====================================================

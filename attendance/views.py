@@ -9,6 +9,7 @@ from notifiations.services import create_notification
 from notifiations.models import Notification
 from parents.models import ParentStudent
 from accounts.models import (
+    CustomUser,
     TeacherProfile,
     AcademicCoordinatorProfile,
 )
@@ -40,172 +41,109 @@ from attendance.permissions import IsAssignedClassTeacher
 # from notifications.services import create_notification
 #  
 # create you views here
-# =====================================================
+## =====================================================
 # Mark Attendance
 # =====================================================
 class MarkAttendanceView(APIView):
     permission_classes = [IsAssignedClassTeacher]
 
+    # ---------------------------------------------
+    # Load Attendance Page
+    # ---------------------------------------------
     @transaction.atomic
-    def post(self, request):
+    def get(self, request):
 
-        serializer = BulkAttendanceSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        assignment_id = request.query_params.get("assignment")
 
-        submission = get_object_or_404(
-            AttendanceSubmission.objects.select_for_update().select_related(
+        if not assignment_id:
+            return Response(
+                {"error": "Assignment is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assignment = get_object_or_404(
+            TeacherAssignment.objects.select_related(
+                "teacher",
                 "classroom",
+                "subject",
             ),
-            pk=serializer.validated_data["submission"],
+            pk=assignment_id,
         )
 
-        # =====================================
-        # Verify Teacher Profile
-        # =====================================
         try:
             teacher_profile = request.user.teacher_profile
 
         except TeacherProfile.DoesNotExist:
             return Response(
-                {
-                    "error": "Only teachers can mark attendance."
-                },
+                {"error": "Only teachers can access attendance."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # =====================================
-        # Verify Teacher Assignment
-        # =====================================
-        assigned = TeacherAssignment.objects.filter(
-            teacher=teacher_profile,
-            classroom=submission.classroom,
-            is_class_teacher=True,
-            is_active=True,
-        ).exists()
-
-        if not assigned:
+        if assignment.teacher != teacher_profile:
             return Response(
-                {
-                    "error": "You are not assigned as the class teacher for this classroom."
-                },
+                {"error": "This assignment does not belong to you."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # =====================================
-        # Attendance already submitted?
-        # =====================================
-        if submission.approval_status == AttendanceSubmission.ApprovalStatus.PENDING:
-            return Response(
-                {
-                    "error": "Attendance has already been submitted for approval."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        submission, created = AttendanceSubmission.objects.get_or_create(
+            assignment=assignment,
+            date=timezone.localdate(),
+            defaults={
+                "classroom": assignment.classroom,
+                "submitted_by": request.user,
+                "approval_status": AttendanceSubmission.ApprovalStatus.DRAFT,
+            },
+        )
 
-        # =====================================
-        # Attendance already approved?
-        # =====================================
-        if submission.approval_status == AttendanceSubmission.ApprovalStatus.APPROVED:
-            return Response(
-                {
-                    "error": "Approved attendance cannot be edited."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        students = Student.objects.filter(
+            classroom=assignment.classroom
+        ).order_by(
+            "admission_number",
+            "first_name",
+        )
+        
 
-        # =====================================
-        # Prevent duplicate students
-        # =====================================
-        student_ids = [
-            record["student"]
-            for record in serializer.validated_data["records"]
-        ]
+        records = []
 
-        if len(student_ids) != len(set(student_ids)):
-            return Response(
-                {
-                    "error": "Duplicate students were found in the attendance records."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        for student in students:
 
-        # =====================================
-        # Attendance Summary
-        # =====================================
-        present = 0
-        absent = 0
-        excused = 0
-
-        # =====================================
-        # Save Attendance
-        # =====================================
-        for record in serializer.validated_data["records"]:
-
-            student = get_object_or_404(
-                Student.objects.select_related("classroom"),
-                pk=record["student"],
-            )
-
-            # Student must belong to this classroom
-            if student.classroom_id != submission.classroom_id:
-                return Response(
-                    {
-                        "error": f"{student.first_name} {student.last_name} does not belong to this classroom."
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            Attendance.objects.update_or_create(
+            attendance, _ = Attendance.objects.get_or_create(
                 submission=submission,
                 student=student,
                 defaults={
-                    "status": record["status"],
-                    "remarks": record.get("remarks", ""),
+                    "status": Attendance.Status.PRESENT,
+                    "remarks": "",
                 },
             )
 
-            if record["status"] == Attendance.Status.PRESENT:
-                present += 1
-
-            elif record["status"] == Attendance.Status.ABSENT:
-                absent += 1
-
-            elif record["status"] == Attendance.Status.EXCUSED:
-                excused += 1
-
-                # -------------------------------------
-        # Parent Notification
-        # -------------------------------------
-        parent_links = ParentStudent.objects.filter(student=student)
-
-        for parent_link in parent_links:
-            create_notification(
-                recipient=parent_link.parent.user,
-                notification_type=Notification.NotificationType.ATTENDANCE,
-                title="Attendance Marked",
-                message=(
-                    f"Dear Parent, {student.first_name} "
-                    f"{student.last_name} has been marked "
-                    f"{record['status']} today."
-                ),
-                triggered_by=request.user,
-            )
+            records.append({
+                "id": attendance.id,
+                "student": student.id,
+                "admission_number": student.admission_number,
+                "name": f"{student.first_name} {student.last_name}",
+                "status": attendance.status,
+                "remarks": attendance.remarks,
+            })
 
         return Response(
             {
-                "message": "Attendance saved successfully.",
                 "submission": submission.id,
-                "classroom": str(submission.classroom),
+                "assignment": assignment.id,
+                "classroom": str(assignment.classroom),
+                "subject": assignment.subject.name,
                 "date": submission.date,
-                "total_records": len(serializer.validated_data["records"]),
-                "summary": {
-                    "present": present,
-                    "absent": absent,
-                    "excused": excused,
-                },
-            },
-            status=status.HTTP_200_OK,
+                "approval_status": submission.approval_status,
+                "students": records,
+            }
         )
+
+    # ---------------------------------------------
+    # Save Attendance
+    # ---------------------------------------------
+    @transaction.atomic
+    def post(self, request):
+
+        #
 
 # =====================================================
 # Submit Attendance
@@ -717,7 +655,6 @@ class StudentAttendanceHistoryView(APIView):
             status=status.HTTP_200_OK,
         )
     
-
 # =====================================================
 # Create Attendance Submission (Draft)
 # =====================================================
@@ -730,14 +667,20 @@ class AttendanceSubmissionCreateView(APIView):
         serializer = CreateAttendanceSubmissionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        classroom = get_object_or_404(
-            ClassRoom,
-            pk=serializer.validated_data["classroom"],
+        assignment = get_object_or_404(
+            TeacherAssignment.objects.select_related(
+                "teacher",
+                "classroom",
+            ),
+            pk=serializer.validated_data["assignment"],
         )
 
-        # Verify teacher profile
+        # =====================================
+        # Verify Teacher Profile
+        # =====================================
         try:
             teacher_profile = request.user.teacher_profile
+
         except TeacherProfile.DoesNotExist:
             return Response(
                 {
@@ -746,49 +689,54 @@ class AttendanceSubmissionCreateView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Verify class teacher assignment
-        assigned = TeacherAssignment.objects.filter(
-            teacher=teacher_profile,
-            classroom=classroom,
-            is_class_teacher=True,
-            is_active=True,
-        ).exists()
-
-        if not assigned:
+        # =====================================
+        # Verify Assignment Ownership
+        # =====================================
+        if assignment.teacher != teacher_profile:
             return Response(
                 {
-                    "error": "You are not the assigned class teacher."
+                    "error": "This assignment does not belong to you."
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Prevent duplicate submissions
+        if not assignment.is_class_teacher:
+            return Response(
+                {
+                    "error": "Only the class teacher can mark attendance."
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not assignment.is_active:
+            return Response(
+                {
+                    "error": "This assignment is inactive."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # =====================================
+        # Create today's draft
+        # =====================================
         submission, created = AttendanceSubmission.objects.get_or_create(
-            classroom=classroom,
+            assignment=assignment,
             date=timezone.localdate(),
             defaults={
+                "classroom": assignment.classroom,
                 "submitted_by": request.user,
                 "approval_status": AttendanceSubmission.ApprovalStatus.DRAFT,
             },
         )
 
-        if not created:
-            return Response(
-                {
-                    "error": "Attendance draft for today already exists.",
-                    "submission_id": submission.id,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         return Response(
             {
-                "message": "Attendance draft created successfully.",
                 "submission": submission.id,
-                "classroom": str(classroom),
+                "created": created,
+                "classroom": str(assignment.classroom),
+                "assignment": assignment.id,
                 "date": submission.date,
                 "status": submission.approval_status,
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_200_OK,
         )
-

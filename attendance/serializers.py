@@ -46,6 +46,10 @@ class AttendanceSubmissionSerializer(serializers.ModelSerializer):
         many=True,
         read_only=True,
     )
+    assignment = serializers.IntegerField(
+        source="assignment.id",
+        read_only=True,
+    )
 
     classroom_name = serializers.SerializerMethodField()
 
@@ -57,6 +61,7 @@ class AttendanceSubmissionSerializer(serializers.ModelSerializer):
         model = AttendanceSubmission
         fields = [
             "id",
+            "assignment",
             "classroom",
             "classroom_name",
             "date",
@@ -261,4 +266,4 @@ class StudentAttendanceHistorySerializer(serializers.ModelSerializer):
     
 
 class CreateAttendanceSubmissionSerializer(serializers.Serializer):
-    classroom = serializers.IntegerField()
+    assignment = serializers.IntegerField()

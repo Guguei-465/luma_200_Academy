@@ -7,7 +7,10 @@ from rest_framework.permissions import IsAuthenticated
 from .models import TeacherAssignment
 from .serializers import TeacherAssignmentSerializer
 from accounts.permisions import IsAdminOrAcademicCoordinator
-
+from rest_framework import generics, filters
+from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend
+from .serializers import TeacherAssignmentSerializer
 
 # =====================================================
 # Create Assignment
@@ -22,13 +25,8 @@ class TeacherAssignmentCreateView(generics.CreateAPIView):
 # List Assignments
 # =====================================================
 class TeacherAssignmentListView(generics.ListAPIView):
-    queryset = TeacherAssignment.objects.select_related(
-        "teacher__user",
-        "classroom",
-        "subject",
-    )
     serializer_class = TeacherAssignmentSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+    permission_classes = [IsAuthenticated]
 
     filter_backends = [
         DjangoFilterBackend,
@@ -61,6 +59,31 @@ class TeacherAssignmentListView(generics.ListAPIView):
         "assigned_date",
         "created_at",
     ]
+
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        queryset = TeacherAssignment.objects.select_related(
+            "teacher__user",
+            "classroom",
+            "subject",
+        )
+
+        # Super Admin and Academic Coordinator see all assignments
+        if user.role in ["SUPER_ADMIN", "ACADEMIC_COORDINATOR"]:
+            return queryset
+
+        # Teacher sees only their own active assignments
+        if user.role == "TEACHER":
+            return queryset.filter(
+                teacher__user=user,
+                is_active=True,
+            )
+
+        # Everyone else gets no assignments
+        return TeacherAssignment.objects.none()
 
 
 # =====================================================
