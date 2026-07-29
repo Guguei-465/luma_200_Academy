@@ -143,7 +143,80 @@ class MarkAttendanceView(APIView):
     @transaction.atomic
     def post(self, request):
 
-        #
+        serializer = BulkAttendanceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        submission = get_object_or_404(
+            AttendanceSubmission.objects.select_for_update().select_related(
+                "assignment",
+                "classroom",
+            ),
+            pk=serializer.validated_data["submission"],
+        )
+
+        try:
+            teacher_profile = request.user.teacher_profile
+
+        except TeacherProfile.DoesNotExist:
+            return Response(
+                {"error": "Only teachers can save attendance."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if submission.assignment.teacher != teacher_profile:
+            return Response(
+                {"error": "This submission does not belong to you."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if submission.approval_status not in [
+            AttendanceSubmission.ApprovalStatus.DRAFT,
+            AttendanceSubmission.ApprovalStatus.RETURNED,
+        ]:
+            return Response(
+                {
+                    "error": "Only draft or returned attendance can be updated."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        records = []
+
+        for record in serializer.validated_data["records"]:
+            student = get_object_or_404(
+                Student.objects.filter(classroom=submission.classroom),
+                pk=record["student"],
+            )
+
+            attendance, _ = Attendance.objects.update_or_create(
+                submission=submission,
+                student=student,
+                defaults={
+                    "status": record["status"],
+                    "remarks": record.get("remarks", ""),
+                },
+            )
+
+            records.append({
+                "id": attendance.id,
+                "student": student.id,
+                "admission_number": student.admission_number,
+                "name": f"{student.first_name} {student.last_name}",
+                "status": attendance.status,
+                "remarks": attendance.remarks,
+            })
+
+        return Response(
+            {
+                "message": "Attendance saved successfully.",
+                "submission": submission.id,
+                "classroom": str(submission.classroom),
+                "date": submission.date,
+                "approval_status": submission.approval_status,
+                "students": records,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 # =====================================================
 # Submit Attendance
