@@ -32,7 +32,8 @@ class ClassRoom(models.Model):
         choices=STREAM_CHOICES
     )
 
-    capacity = models.PositiveIntegerField(default=40)
+    capacity = models.PositiveIntegerField(default=0)
+    total_students = models.PositiveIntegerField(default=0, editable=False)
 
     class_teacher = models.ForeignKey(
         "accounts.TeacherProfile",
