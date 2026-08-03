@@ -7,7 +7,6 @@ from .models import (
     StudentResult,
     StudentTermResult,
 )
-from .models import StudentResult
 from django.db.models import Max, Min, Avg, Count
 
 
@@ -77,11 +76,6 @@ def update_result(result):
     result.weighted_marks = calculate_weighted_marks(result)
     result.cbc_code = cbc_code
     result.cbc_description = cbc_description
-
-    print("Percentage:", percentage)
-    print("Grade:", grade)
-    print("CBC:", cbc_code)
-    print("Weighted:", result.weighted_marks)
 
     result.save(
         update_fields=[

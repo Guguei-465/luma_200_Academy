@@ -5,7 +5,11 @@ from students.models import Student
 from subjects.models import Subject
 from students.models import ClassRoom
 
-
+TERM_CHOICES = [
+    ("Term 1", "Term 1"),
+    ("Term 2", "Term 2"),
+    ("Term 3", "Term 3"),
+]
 # =====================================================
 # CBC Grade Scale
 # =====================================================
@@ -162,17 +166,15 @@ class Assessment(models.Model):
     academic_year = models.CharField(
         max_length=20
     )
-
-    term = models.CharField(
-        max_length=20,
-        choices=TERM_CHOICES
-    )
+    
+    term = models.CharField(max_length=20, choices=TERM_CHOICES)
 
     total_marks = models.DecimalField(
         max_digits=5,
         decimal_places=2,
         default=100
     )
+    
 
     assessment_date = models.DateField()
 
@@ -260,10 +262,6 @@ class ResultSubmission(models.Model):
     def __str__(self):
         return f"{self.assessment} ({self.approval_status})"
 
-
-# =====================================================
-# Student Marks
-# =====================================================
 # =====================================================
 # Student Marks
 # =====================================================
@@ -333,11 +331,6 @@ class Result(models.Model):
         blank=True
     )
 
-    # Subject teacher's comment
-    remarks = models.CharField(
-        max_length=255,
-        blank=True
-    )
 
     entered_by = models.ForeignKey(
         CustomUser,
@@ -513,11 +506,8 @@ class StudentTermResult(models.Model):
         ("Term 2", "Term 2"),
         ("Term 3", "Term 3"),
     ]
+    term = models.CharField(max_length=20, choices=TERM_CHOICES)
 
-    term = models.CharField(
-        max_length=20,
-        choices=TERM_CHOICES
-    )
 
     total_marks = models.DecimalField(
         max_digits=8,

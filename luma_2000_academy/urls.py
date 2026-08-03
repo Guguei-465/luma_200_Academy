@@ -42,5 +42,4 @@ urlpatterns = [
     path("api/anouncements/",include("anouncements.urls"),),
     path("api/parents/", include("parents.urls")),
     path("api/notifiations/", include("notifiations.urls")),
-    path("api/reports/", include("reports.urls")),
 ]

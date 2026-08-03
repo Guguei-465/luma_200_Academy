@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import (
+    AssessmentRubric,
     GradeScale,
     AssessmentType,
     Assessment,
@@ -143,3 +144,9 @@ class ReportCommentAdmin(admin.ModelAdmin):
         "grade",
         "comment",
     )
+
+# results/admin.py
+@admin.register(AssessmentRubric)
+class AssessmentRubricAdmin(admin.ModelAdmin):
+    list_display = ("code", "description", "min_score", "max_score", "order")
+    ordering = ("order",)
