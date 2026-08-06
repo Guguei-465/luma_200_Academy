@@ -9,6 +9,7 @@ class CustomUser(AbstractUser):
         ACCOUNTANT = "ACCOUNTANT", "Accountant"
         TEACHER = "TEACHER", "Teacher"
         PARENT = "PARENT", "Parent"
+        "STUDENT" = "STUDENT", "Student"
 
     role = models.CharField(
         max_length=30,
@@ -166,3 +167,45 @@ class AcademicCoordinatorProfile(models.Model):
 
     def __str__(self):
         return self.user.get_full_name() or self.user.username 
+
+# ==========================================
+# Student Profile
+# ==========================================
+class StudentProfile(models.Model):
+    class Gender(models.TextChoices):
+        MALE = "Male", "Male"
+        FEMALE = "Female", "Female"
+
+    user = models.OneToOneField(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="student_profile",
+    )
+
+    admission_number = models.CharField(
+        max_length=30,
+        unique=True,
+    )
+
+    national_id = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        unique=True,
+    )
+
+    gender = models.CharField(
+        max_length=10,
+        choices=Gender.choices,
+    )
+
+    date_of_birth = models.DateField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["admission_number"]
+
+    def __str__(self):
+        return self.user.get_full_name() or self.user.username

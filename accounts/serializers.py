@@ -6,6 +6,7 @@ from .models import (
     TeacherProfile,
     AccountantProfile,
     AcademicCoordinatorProfile,
+    StudentProfile,
 )
 
 User = get_user_model()
@@ -114,3 +115,16 @@ class AcademicCoordinatorProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = AcademicCoordinatorProfile
         fields = "__all__"
+
+
+
+# --- Student ---
+class StudentProfileSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = StudentProfile
+        fields = [
+            "id", "user", "admission_number", "national_id",
+            "gender", "date_of_birth", "created_at", "updated_at"
+        ]        

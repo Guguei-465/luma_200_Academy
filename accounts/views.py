@@ -1,5 +1,7 @@
 from django.contrib.auth import authenticate
 from django.db import IntegrityError
+from django.views import generic
+from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -7,10 +9,11 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from accounts.serializers import RegisterSerializer, UserSerializer
+from accounts.serializers import RegisterSerializer, StudentProfileSerializer, UserSerializer
 from .models import (
     CustomUser,
     ParentProfile,
+    StudentProfile,
     TeacherProfile,
     AccountantProfile,
     AcademicCoordinatorProfile,
@@ -539,3 +542,17 @@ def ResetPassword(request, id):
         },
         status=status.HTTP_200_OK,
     )
+
+
+class StudentProfileView(generic.RetrieveUpdateAPIView):
+    serializer_class = StudentProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        try:
+            return StudentProfile.objects.get(user=self.request.user)
+        except StudentProfile.DoesNotExist:
+            return Response(
+                        {"error": "Student not found."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
