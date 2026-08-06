@@ -9,7 +9,7 @@ class CustomUser(AbstractUser):
         ACCOUNTANT = "ACCOUNTANT", "Accountant"
         TEACHER = "TEACHER", "Teacher"
         PARENT = "PARENT", "Parent"
-        "STUDENT" = "STUDENT", "Student"
+        STUDENT = "STUDENT", "Student"
 
     role = models.CharField(
         max_length=30,
