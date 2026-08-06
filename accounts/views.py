@@ -1,6 +1,7 @@
 from django.contrib.auth import authenticate
 from django.db import IntegrityError
 from django.views import generic
+from rest_framework.exceptions import NotFound
 from rest_framework import permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -552,7 +553,4 @@ class StudentProfileView(generic.RetrieveUpdateAPIView):
         try:
             return StudentProfile.objects.get(user=self.request.user)
         except StudentProfile.DoesNotExist:
-            return Response(
-                        {"error": "Student not found."},
-                        status=status.HTTP_404_NOT_FOUND,
-                    )
+            raise NotFound("Student profile not found.")
