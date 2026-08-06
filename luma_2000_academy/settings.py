@@ -44,7 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
+    'django_rest_passwordreset'
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
@@ -71,6 +71,18 @@ INSTALLED_APPS = [
     
     
 ]
+
+# Email config (critical — sends reset links)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com' # or your provider
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'your-school-email@gmail.com'
+EMAIL_HOST_PASSWORD = 'your-app-password' # use app password for Gmail
+DEFAULT_FROM_EMAIL = 'Luma 2000 Academy <no-reply@school.ac.ke>'
+
+# Optional: customize reset token expiry (default 24h)
+DJANGO_REST_PASSWORDRESET_TOKEN_EXPIRY_TIME = 3600 # 1 hour in seconds
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',

@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from .views import(
      ChangePassword,
     DeleteUser, 
@@ -14,6 +14,7 @@ urlpatterns = [
     path("login/", Login, name="login"),
     path("logout/", Logout, name="logout"),
     path("test/", test, name="test"),
+     path('password/reset/', include('django_rest_passwordreset.urls', namespace='password_reset')),
 
     # Registration
     path("register/", Register, name="register"),
