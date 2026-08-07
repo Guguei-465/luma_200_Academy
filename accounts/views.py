@@ -1,8 +1,7 @@
 from django.contrib.auth import authenticate
 from django.db import IntegrityError
-from django.views import generic
 from rest_framework.exceptions import NotFound
-from rest_framework import permissions
+from rest_framework import permissions, generics
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -10,7 +9,15 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from accounts.serializers import RegisterSerializer, StudentProfileSerializer, UserSerializer
+from accounts.serializers import (
+    RegisterSerializer,
+    StudentProfileSerializer,
+    UserSerializer,
+    ParentProfileSerializer,
+    TeacherProfileSerializer,
+    AccountantProfileSerializer,
+    AcademicCoordinatorProfileSerializer,
+)
 from .models import (
     CustomUser,
     ParentProfile,
@@ -24,6 +31,9 @@ from django.core.exceptions import ValidationError
 
  
 # after deleting old model
+# NOTE: Student records are managed by the dedicated `students` app.
+# The `students.Student` model has no `user` FK, so it is intentionally
+# excluded from this role-based profile mapping.
 PROFILE_MODELS = {
     CustomUser.Role.PARENT: ParentProfile,
     CustomUser.Role.TEACHER: TeacherProfile,
@@ -229,23 +239,7 @@ def UserList(request):
 
     users = CustomUser.objects.order_by("id")
 
-    data = []
-
-    for user in users:
-        data.append(
-            {
-                "id": user.id,
-                "username": user.username,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "email": user.email,
-                "phone_number": user.phone_number,
-                "role": user.role,
-                "is_active": user.is_active,
-                "created_at": user.created_at,
-            }
-        )
-    serializer = UserSerializer(users,many=True)
+    serializer = UserSerializer(users, many=True)
     return Response(serializer.data)
 
 
@@ -327,18 +321,18 @@ def UpdateUser(request, id):
     user.is_active = is_active
     user.save()
 
-     # If the role changed, remove the old profile and create the new one
+    # If the role changed, remove the old profile and create the new one
     if old_role != role:
-
         old_profile_model = PROFILE_MODELS_BY_ROLE.get(old_role)
 
-    if old_profile_model:
-        old_profile_model.objects.filter(user=user).delete()
+        if old_profile_model:
+            old_profile_model.objects.filter(user=user).delete()
 
-    new_profile_model = PROFILE_MODELS_BY_ROLE.get(role)
+        new_profile_model = PROFILE_MODELS_BY_ROLE.get(role)
 
-    if new_profile_model:
-        new_profile_model.objects.get_or_create(user=user)
+        if new_profile_model:
+            new_profile_model.objects.get_or_create(user=user)
+
     return Response(
         {
             "message": "User updated successfully.",
@@ -545,7 +539,59 @@ def ResetPassword(request, id):
     )
 
 
-class StudentProfileView(generic.RetrieveUpdateAPIView):
+class AcademicCoordinatorProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = AcademicCoordinatorProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        instance = AcademicCoordinatorProfile.objects.filter(
+            user=self.request.user
+        ).first()
+        if instance is None:
+            raise NotFound("Academic coordinator profile not found.")
+        return instance
+
+
+class TeacherProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = TeacherProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        instance = TeacherProfile.objects.filter(
+            user=self.request.user
+        ).first()
+        if instance is None:
+            raise NotFound("Teacher profile not found.")
+        return instance
+
+
+class AccountantProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = AccountantProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        instance = AccountantProfile.objects.filter(
+            user=self.request.user
+        ).first()
+        if instance is None:
+            raise NotFound("Accountant profile not found.")
+        return instance
+
+
+class ParentProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = ParentProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        instance = ParentProfile.objects.filter(
+            user=self.request.user
+        ).first()
+        if instance is None:
+            raise NotFound("Parent profile not found.")
+        return instance
+
+
+class StudentProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = StudentProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
 
