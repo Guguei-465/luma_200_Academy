@@ -11,5 +11,6 @@ class IsSuperAdminOrAcademicCoordinator(BasePermission):
             request.user.role in [
                 CustomUser.Role.SUPER_ADMIN,
                 CustomUser.Role.ACADEMIC_COORDINATOR,
+                CustomUser.Role.ACCOUNTANT,
             ]
         )
