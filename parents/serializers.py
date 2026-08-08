@@ -9,6 +9,16 @@ class ParentStudentSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    parent_user_id = serializers.IntegerField(
+        source="parent.user.id",
+        read_only=True,
+    )
+
+    parent_phone = serializers.CharField(
+        source="parent.user.phone_number",
+        read_only=True,
+    )
+
     student_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -17,6 +27,8 @@ class ParentStudentSerializer(serializers.ModelSerializer):
             "id",
             "parent",
             "parent_name",
+            "parent_user_id",
+            "parent_phone",
             "student",
             "student_name",
             "relationship",

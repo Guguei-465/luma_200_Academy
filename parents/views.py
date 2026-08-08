@@ -11,15 +11,23 @@ from .serializers import ParentStudentSerializer
 # Create your views here.
 class ParentStudentViewSet(viewsets.ModelViewSet):
     serializer_class = ParentStudentSerializer
+
     def get_queryset(self):
         user = self.request.user
 
-        if user.role == user.Role.SUPER_ADMIN:
+        # Staff (super admin, academic coordinator, accountant, teacher) can view all parent records
+        if user.role in [
+            user.Role.SUPER_ADMIN,
+            user.Role.ACCOUNTANT,
+            user.Role.ACADEMIC_COORDINATOR,
+            user.Role.TEACHER,
+        ]:
             return ParentStudent.objects.select_related(
                 "parent__user",
                 "student",
             )
 
+        # A parent sees only their own linked children
         parent = ParentProfile.objects.filter(
             user=user
         ).first()
