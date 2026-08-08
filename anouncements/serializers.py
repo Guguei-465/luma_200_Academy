@@ -5,6 +5,7 @@ from .models import Announcement
 
 class AnnouncementSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
+    recipient_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Announcement
@@ -14,6 +15,8 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "message",
             "priority",
             "target",
+            "recipient",
+            "recipient_name",
             "created_by",
             "created_by_name",
             "is_active",
@@ -25,6 +28,14 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_recipient_name(self, obj):
+        if obj.recipient:
+            return (
+                obj.recipient.get_full_name()
+                or obj.recipient.username
+            )
+        return None
 
     def get_created_by_name(self, obj):
         if obj.created_by:

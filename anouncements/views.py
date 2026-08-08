@@ -62,25 +62,19 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         # Save announcement with creator
         announcement = serializer.save(created_by=self.request.user)
 
-        # Resolve correct recipients
-        if announcement.target == Announcement.Target.ALL_USERS:
-            recipients = CustomUser.objects.filter(is_active=True)
-        elif announcement.target == Announcement.Target.PARENTS:
-            recipients = CustomUser.objects.filter(role=CustomUser.Role.PARENT, is_active=True)
-        elif announcement.target == Announcement.Target.TEACHERS:
-            recipients = CustomUser.objects.filter(role=CustomUser.Role.TEACHER, is_active=True)
-        elif announcement.target == Announcement.Target.STAFF:
-            recipients = CustomUser.objects.filter(
-                role__in=[
-                    CustomUser.Role.SUPER_ADMIN,
-                    CustomUser.Role.ACADEMIC_COORDINATOR,
-                    CustomUser.Role.ACCOUNTANT,
-                    CustomUser.Role.TEACHER,
-                ],
-                is_active=True
+        # If a specific recipient is set, notify only that user
+        if announcement.recipient is not None:
+            Notification.objects.create(
+                recipient=announcement.recipient,
+                triggered_by=self.request.user,
+                notification_type=Notification.NotificationType.ANNOUNCEMENT,
+                title=announcement.title,
+                message=announcement.message,
             )
-        else:
-            recipients = CustomUser.objects.none()
+            return
+
+        # Otherwise resolve recipients based on target and broadcast
+        recipients = self._resolve_recipients(announcement.target)
 
         # Guard: skip empty list
         if recipients.exists():
@@ -96,6 +90,24 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
             ]
             Notification.objects.bulk_create(notifications)
 
+    def _resolve_recipients(self, target):
+        if target == Announcement.Target.ALL_USERS:
+            return CustomUser.objects.filter(is_active=True)
+        elif target == Announcement.Target.PARENTS:
+            return CustomUser.objects.filter(role=CustomUser.Role.PARENT, is_active=True)
+        elif target == Announcement.Target.TEACHERS:
+            return CustomUser.objects.filter(role=CustomUser.Role.TEACHER, is_active=True)
+        elif target == Announcement.Target.STAFF:
+            return CustomUser.objects.filter(
+                role__in=[
+                    CustomUser.Role.SUPER_ADMIN,
+                    CustomUser.Role.ACADEMIC_COORDINATOR,
+                    CustomUser.Role.ACCOUNTANT,
+                    CustomUser.Role.TEACHER,
+                ],
+                is_active=True
+            )
+        return CustomUser.objects.none()
 
     # ✅ ONLY ONE CLEAN RESEND ACTION — NO DUPLICATES!
     @action(detail=True, methods=["post"], url_path="resend")
@@ -103,25 +115,22 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         try:
             announcement = self.get_object()
 
-            # --- EXACT SAME recipient logic as perform_create ---
-            if announcement.target == Announcement.Target.ALL_USERS:
-                recipients = CustomUser.objects.filter(is_active=True)
-            elif announcement.target == Announcement.Target.PARENTS:
-                recipients = CustomUser.objects.filter(role=CustomUser.Role.PARENT, is_active=True)
-            elif announcement.target == Announcement.Target.TEACHERS:
-                recipients = CustomUser.objects.filter(role=CustomUser.Role.TEACHER, is_active=True)
-            elif announcement.target == Announcement.Target.STAFF:
-                recipients = CustomUser.objects.filter(
-                    role__in=[
-                        CustomUser.Role.SUPER_ADMIN,
-                        CustomUser.Role.ACADEMIC_COORDINATOR,
-                        CustomUser.Role.ACCOUNTANT,
-                        CustomUser.Role.TEACHER,
-                    ],
-                    is_active=True
+            # If a specific recipient is set, notify only that user
+            if announcement.recipient is not None:
+                Notification.objects.create(
+                    recipient=announcement.recipient,
+                    triggered_by=request.user,
+                    notification_type=Notification.NotificationType.ANNOUNCEMENT,
+                    title=announcement.title,
+                    message=announcement.message,
                 )
-            else:
-                recipients = CustomUser.objects.none()
+                return Response(
+                    {"detail": "✅ Resent successfully! Sent to 1 recipient."},
+                    status=status.HTTP_200_OK
+                )
+
+            # Otherwise resolve recipients based on target
+            recipients = self._resolve_recipients(announcement.target)
 
             created_count = 0
             if recipients.exists():

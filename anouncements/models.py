@@ -27,6 +27,13 @@ class Announcement(models.Model):
         choices=Target.choices,
         default=Target.ALL_USERS,
     )
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="personal_announcements",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
