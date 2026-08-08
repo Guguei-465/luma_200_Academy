@@ -1,10 +1,10 @@
 from django.db.models import Q
-from rest_framework import viewsets, filters
+from rest_framework import viewsets, filters, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
-# 📌 DO NOT CHANGE — kept your exact import name
+# 📌 Preserved your exact import spelling
 from notifiations.models import Notification
 from accounts.models import CustomUser
 
@@ -15,11 +15,11 @@ from .permissions import IsSuperAdminOrAcademicCoordinator
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
     serializer_class = AnnouncementSerializer
-    queryset = Announcement.objects.all()  # Explicit queryset added
-    ordering = ["-created_at"]  # Newest announcements first
-    pagination_class = PageNumberPagination  # Prevent huge list loads
+    queryset = Announcement.objects.all()
+    ordering = ["-created_at"]
+    pagination_class = PageNumberPagination
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["title", "message"]  # Enable search by title/message
+    search_fields = ["title", "message"]
     ordering_fields = ["created_at", "priority"]
 
     def get_queryset(self):
@@ -82,8 +82,8 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         else:
             recipients = CustomUser.objects.none()
 
-        # Fixed loop variable bug — assign to correct recipient
-        if recipients.exists():  # Guard: skip empty list
+        # Guard: skip empty list
+        if recipients.exists():
             notifications = [
                 Notification(
                     recipient=recipient,
@@ -97,22 +97,55 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
             Notification.objects.bulk_create(notifications)
 
 
-    # ✅ ADD THIS: creates /<pk>/resend/ POST route
+    # ✅ ONLY ONE CLEAN RESEND ACTION — NO DUPLICATES!
     @action(detail=True, methods=["post"], url_path="resend")
     def resend(self, request, pk=None):
-        announcement = self.get_object()
-        # Re-run your existing notification bulk-create logic here
-        recipients = self.get_recipients_for_target(announcement.target) # reuse your target logic
-        if recipients.exists():
-            notifications = [
-                Notification(
-                    recipient=recipient,
-                    triggered_by=request.user,
-                    notification_type=Notification.NotificationType.ANNOUNCEMENT,
-                    title=announcement.title,
-                    message=announcement.message
+        try:
+            announcement = self.get_object()
+
+            # --- EXACT SAME recipient logic as perform_create ---
+            if announcement.target == Announcement.Target.ALL_USERS:
+                recipients = CustomUser.objects.filter(is_active=True)
+            elif announcement.target == Announcement.Target.PARENTS:
+                recipients = CustomUser.objects.filter(role=CustomUser.Role.PARENT, is_active=True)
+            elif announcement.target == Announcement.Target.TEACHERS:
+                recipients = CustomUser.objects.filter(role=CustomUser.Role.TEACHER, is_active=True)
+            elif announcement.target == Announcement.Target.STAFF:
+                recipients = CustomUser.objects.filter(
+                    role__in=[
+                        CustomUser.Role.SUPER_ADMIN,
+                        CustomUser.Role.ACADEMIC_COORDINATOR,
+                        CustomUser.Role.ACCOUNTANT,
+                        CustomUser.Role.TEACHER,
+                    ],
+                    is_active=True
                 )
-                for recipient in recipients
-            ]
-            Notification.objects.bulk_create(notifications)
-        return Response({"detail": "✅ Resent successfully"})
+            else:
+                recipients = CustomUser.objects.none()
+
+            created_count = 0
+            if recipients.exists():
+                notifications = [
+                    Notification(
+                        recipient=recipient,
+                        triggered_by=request.user,
+                        notification_type=Notification.NotificationType.ANNOUNCEMENT,
+                        title=announcement.title,
+                        message=announcement.message,
+                    )
+                    for recipient in recipients
+                ]
+                Notification.objects.bulk_create(notifications)
+                created_count = len(notifications)
+
+            return Response(
+                {"detail": f"✅ Resent successfully! Sent to {created_count} recipients."},
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            print("❌ RESEND ERROR:", str(e))
+            return Response(
+                {"detail": f"Failed to resend: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
