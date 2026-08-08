@@ -30,8 +30,9 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
                 is_active=True
             ).filter(
                 Q(target=Announcement.Target.ALL_USERS) |
-                Q(target=Announcement.Target.PARENTS)
-            )
+                Q(target=Announcement.Target.PARENTS) |
+                Q(recipient=user)
+            ).distinct()
 
         elif user.role == CustomUser.Role.TEACHER:
             return super().get_queryset().filter(
@@ -42,13 +43,16 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
                 Q(target=Announcement.Target.TEACHERS)
             )
 
-        # All other staff/accountant/admin
+        # All other staff/accountant/admin: show everything they can see AND their own
         return super().get_queryset().filter(
             is_active=True
         ).filter(
             Q(target=Announcement.Target.ALL_USERS) |
-            Q(target=Announcement.Target.STAFF)
-        )
+            Q(target=Announcement.Target.STAFF) |
+            Q(target=Announcement.Target.PARENTS) |
+            Q(recipient=user) |
+            Q(created_by=user)
+        ).distinct()
 
     def get_permissions(self):
         if self.action in ["create", "update", "partial_update", "destroy"]:
