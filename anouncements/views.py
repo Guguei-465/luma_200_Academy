@@ -97,10 +97,6 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
             Notification.objects.bulk_create(notifications)
 
 
-
-class AnnouncementViewSet(viewsets.ModelViewSet):
-    # ... your existing code ...
-
     # ✅ ADD THIS: creates /<pk>/resend/ POST route
     @action(detail=True, methods=["post"], url_path="resend")
     def resend(self, request, pk=None):
