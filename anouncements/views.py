@@ -2,7 +2,8 @@ from django.db.models import Q
 from rest_framework import viewsets, filters
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
-
+from rest_framework.decorators import action
+from rest_framework.response import Response
 # 📌 DO NOT CHANGE — kept your exact import name
 from notifiations.models import Notification
 from accounts.models import CustomUser
@@ -94,3 +95,28 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
                 for recipient in recipients
             ]
             Notification.objects.bulk_create(notifications)
+
+
+
+class AnnouncementViewSet(viewsets.ModelViewSet):
+    # ... your existing code ...
+
+    # ✅ ADD THIS: creates /<pk>/resend/ POST route
+    @action(detail=True, methods=["post"], url_path="resend")
+    def resend(self, request, pk=None):
+        announcement = self.get_object()
+        # Re-run your existing notification bulk-create logic here
+        recipients = self.get_recipients_for_target(announcement.target) # reuse your target logic
+        if recipients.exists():
+            notifications = [
+                Notification(
+                    recipient=recipient,
+                    triggered_by=request.user,
+                    notification_type=Notification.NotificationType.ANNOUNCEMENT,
+                    title=announcement.title,
+                    message=announcement.message
+                )
+                for recipient in recipients
+            ]
+            Notification.objects.bulk_create(notifications)
+        return Response({"detail": "✅ Resent successfully"})
