@@ -1,8 +1,9 @@
 from django.db.models import Q
-
-from rest_framework import viewsets
+from rest_framework import viewsets, filters
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 
+# 📌 DO NOT CHANGE — kept your exact import name
 from notifiations.models import Notification
 from accounts.models import CustomUser
 
@@ -12,25 +13,27 @@ from .permissions import IsSuperAdminOrAcademicCoordinator
 
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
-
     serializer_class = AnnouncementSerializer
-
+    queryset = Announcement.objects.all()  # Explicit queryset added
+    ordering = ["-created_at"]  # Newest announcements first
+    pagination_class = PageNumberPagination  # Prevent huge list loads
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["title", "message"]  # Enable search by title/message
+    ordering_fields = ["created_at", "priority"]
 
     def get_queryset(self):
-
         user = self.request.user
 
         if user.role == CustomUser.Role.PARENT:
-            return Announcement.objects.filter(
+            return super().get_queryset().filter(
                 is_active=True
             ).filter(
                 Q(target=Announcement.Target.ALL_USERS) |
                 Q(target=Announcement.Target.PARENTS)
             )
 
-
         elif user.role == CustomUser.Role.TEACHER:
-            return Announcement.objects.filter(
+            return super().get_queryset().filter(
                 is_active=True
             ).filter(
                 Q(target=Announcement.Target.ALL_USERS) |
@@ -38,70 +41,34 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
                 Q(target=Announcement.Target.TEACHERS)
             )
 
-
-        return Announcement.objects.filter(
+        # All other staff/accountant/admin
+        return super().get_queryset().filter(
             is_active=True
         ).filter(
             Q(target=Announcement.Target.ALL_USERS) |
             Q(target=Announcement.Target.STAFF)
         )
 
-
     def get_permissions(self):
-
-        if self.action in [
-            "create",
-            "update",
-            "partial_update",
-            "destroy",
-        ]:
-            permission_classes = [
-                IsSuperAdminOrAcademicCoordinator,
-            ]
-
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            permission_classes = [IsSuperAdminOrAcademicCoordinator]
         else:
-            permission_classes = [
-                IsAuthenticated,
-            ]
+            permission_classes = [IsAuthenticated]
 
-        return [
-            permission()
-            for permission in permission_classes
-        ]
-
+        return [permission() for permission in permission_classes]
 
     def perform_create(self, serializer):
+        # Save announcement with creator
+        announcement = serializer.save(created_by=self.request.user)
 
-        announcement = serializer.save(
-            created_by=self.request.user
-        )
-
-
+        # Resolve correct recipients
         if announcement.target == Announcement.Target.ALL_USERS:
-
-            recipients = CustomUser.objects.filter(
-                is_active=True
-            )
-
-
+            recipients = CustomUser.objects.filter(is_active=True)
         elif announcement.target == Announcement.Target.PARENTS:
-
-            recipients = CustomUser.objects.filter(
-                role=CustomUser.Role.PARENT,
-                is_active=True
-            )
-
-
+            recipients = CustomUser.objects.filter(role=CustomUser.Role.PARENT, is_active=True)
         elif announcement.target == Announcement.Target.TEACHERS:
-
-            recipients = CustomUser.objects.filter(
-                role=CustomUser.Role.TEACHER,
-                is_active=True
-            )
-
-
+            recipients = CustomUser.objects.filter(role=CustomUser.Role.TEACHER, is_active=True)
         elif announcement.target == Announcement.Target.STAFF:
-
             recipients = CustomUser.objects.filter(
                 role__in=[
                     CustomUser.Role.SUPER_ADMIN,
@@ -111,20 +78,19 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
                 ],
                 is_active=True
             )
+        else:
+            recipients = CustomUser.objects.none()
 
-
-        notifications = [
-            Notification(
-                recipient=user,
-                triggered_by=self.request.user,
-                notification_type=Notification.NotificationType.ANNOUNCEMENT,
-                title=announcement.title,
-                message=announcement.message,
-            )
-            for user in recipients
-        ]
-
-
-        Notification.objects.bulk_create(
-            notifications
-        )
+        # Fixed loop variable bug — assign to correct recipient
+        if recipients.exists():  # Guard: skip empty list
+            notifications = [
+                Notification(
+                    recipient=recipient,
+                    triggered_by=self.request.user,
+                    notification_type=Notification.NotificationType.ANNOUNCEMENT,
+                    title=announcement.title,
+                    message=announcement.message,
+                )
+                for recipient in recipients
+            ]
+            Notification.objects.bulk_create(notifications)
