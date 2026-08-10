@@ -73,13 +73,11 @@ class AssessmentTypeViewSet(viewsets.ModelViewSet):
 # Assessment
 # =====================================================
 class AssessmentViewSet(viewsets.ModelViewSet):
-
     queryset = Assessment.objects.select_related(
         "subject",
         "classroom",
-        "assessment_type",
+        "created_by"
     )
-
     serializer_class = AssessmentSerializer
 
     permission_classes = [
