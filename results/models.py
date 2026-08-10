@@ -145,10 +145,8 @@ class Assessment(models.Model):
         ("Term 3", "Term 3"),
     ]
 
-    assessment_type = models.ForeignKey(
-        AssessmentType,
-        on_delete=models.CASCADE,
-        related_name="assessments"
+    assessment_type = models.CharField(
+        max_length=100
     )
 
     classroom = models.ForeignKey(
