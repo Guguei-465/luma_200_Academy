@@ -25,7 +25,7 @@ class StudentSerializer(serializers.ModelSerializer):
             "classroom",
             "classroom_name",
             "class_teacher",
-            "parent",
+            "national_id",
             "parent_name",
             "status",
             "photo",
