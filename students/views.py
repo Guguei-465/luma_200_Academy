@@ -306,7 +306,7 @@ class StudentTransferDetailView(APIView):
 
 # =====================================================
 # PARENT CHILDREN
-# GET /api/students/parent/children/
+# GET /api/dashboard/parent/children/
 # =====================================================
 
 class ParentChildrenView(APIView):
@@ -315,9 +315,17 @@ class ParentChildrenView(APIView):
 
     def get(self, request):
 
+        # =================================================
+        # STEP 1: FIND PARENT PROFILE FOR LOGGED-IN USER
+        # =================================================
+
         parent = ParentProfile.objects.filter(
             user=request.user
         ).first()
+
+        # =================================================
+        # NO PARENT PROFILE
+        # =================================================
 
         if not parent:
             return Response(
@@ -326,25 +334,48 @@ class ParentChildrenView(APIView):
                     "children": [],
                     "message": "Parent profile not found."
                 },
-                status=status.HTTP_200_OK
+                status=200
             )
 
-        children = Student.objects.filter(
-            parent=parent
-        ).select_related(
-            "parent__user",
-            "classroom",
+        # =================================================
+        # STEP 2: GET ONLY THIS PARENT'S CHILDREN
+        # =================================================
+
+        children = (
+            Student.objects
+            .filter(parent=parent)
+            .select_related(
+                "parent",
+                "parent__user",
+                "classroom",
+            )
+            .order_by(
+                "first_name",
+                "last_name",
+            )
         )
+
+        # =================================================
+        # STEP 3: SERIALIZE CHILDREN
+        # =================================================
 
         serializer = StudentListSerializer(
             children,
             many=True,
-            context={"request": request}
+            context={
+                "request": request
+            }
         )
+
+        # =================================================
+        # STEP 4: RETURN CHILDREN
+        # =================================================
 
         return Response(
             {
+                "parent_id": parent.id,
                 "children_count": children.count(),
                 "children": serializer.data,
-            }
+            },
+            status=200
         )
