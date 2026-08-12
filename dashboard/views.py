@@ -513,7 +513,7 @@ class ParentChildrenAPIView(APIView):
             return Response([])
 
         parent_students = (
-            Paren.objects
+            parent.objects
             .filter(parent=parent)
             .select_related(
                 "student",
