@@ -407,33 +407,87 @@ class ParentDashboardAPIView(APIView):
 
     def get(self, request):
 
-        parent = ParentProfile.objects.filter(user=request.user).first()
+        # ==============================================
+        # Find logged-in parent
+        # ==============================================
+
+        parent = ParentProfile.objects.filter(
+            user=request.user
+        ).first()
 
         if not parent:
-            return Response({"detail": "Parent profile not found."}, status=404)
+            return Response(
+                {
+                    "detail": "Parent profile not found."
+                },
+                status=404
+            )
 
-        students = ParentStudent.objects.filter(parent=parent).select_related("student")
-        student_list = [item.student for item in students]
-        children_count = len(student_list)
+        # ==============================================
+        # Get children directly through Student.parent
+        # ==============================================
+
+        students = Student.objects.filter(
+            parent=parent
+        )
+
+        children_count = students.count()
+
+        # ==============================================
+        # Fee balance
+        # ==============================================
 
         fee_summary = StudentFee.objects.filter(
-            student__in=student_list
-        ).aggregate(total_balance=Sum("balance"))
+            student__in=students
+        ).aggregate(
+            total_balance=Sum("balance")
+        )
 
-        total_fee_balance = fee_summary["total_balance"] or Decimal("0.00")
+        total_fee_balance = (
+            fee_summary["total_balance"]
+            or Decimal("0.00")
+        )
 
-        attendance = Attendance.objects.filter(student__in=student_list)
+        # ==============================================
+        # Attendance
+        # ==============================================
+
+        attendance = Attendance.objects.filter(
+            student__in=students
+        )
+
         total = attendance.count()
-        present = attendance.filter(status=Attendance.Status.PRESENT).count()
 
-        overall_attendance = round((present / total) * 100, 2) if total > 0 else Decimal("0.00")
+        present = attendance.filter(
+            status=Attendance.Status.PRESENT
+        ).count()
+
+        overall_attendance = (
+            round((present / total) * 100, 2)
+            if total > 0
+            else Decimal("0.00")
+        )
+
+        # ==============================================
+        # Unread notifications
+        # ==============================================
 
         unread_notifications = Notification.objects.filter(
             recipient=request.user,
             is_read=False,
         ).count()
 
-        announcements = Announcement.objects.order_by("-created_at")[:5]
+        # ==============================================
+        # Announcements
+        # ==============================================
+
+        announcements = Announcement.objects.order_by(
+            "-created_at"
+        )[:5]
+
+        # ==============================================
+        # Response
+        # ==============================================
 
         serializer = ParentDashboardSerializer({
             "parent_name": request.user.get_full_name(),
@@ -459,7 +513,7 @@ class ParentChildrenAPIView(APIView):
             return Response([])
 
         parent_students = (
-            ParentStudent.objects
+            Paren.objects
             .filter(parent=parent)
             .select_related(
                 "student",
@@ -517,59 +571,166 @@ class ParentChildDetailsAPIView(APIView):
 
     def get(self, request, id):
 
-        parent = get_object_or_404(ParentProfile, user=request.user)
+        # ==============================================
+        # Find logged-in parent
+        # ==============================================
 
-        parent_student = get_object_or_404(
-            ParentStudent.objects.select_related(
-                "student",
-                "student__classroom",
-                "student__classroom__class_teacher",
-                "student__classroom__class_teacher__user",
-            ),
-            parent=parent,
-            student_id=id,
+        parent = get_object_or_404(
+            ParentProfile,
+            user=request.user
         )
 
-        student = parent_student.student
-        teacher = student.classroom.class_teacher
+        # ==============================================
+        # Get child directly through Student.parent
+        #
+        # This also ensures the parent cannot request
+        # another parent's child.
+        # ==============================================
 
-        attendance = Attendance.objects.filter(student=student)
+        student = get_object_or_404(
+            Student.objects.select_related(
+                "classroom",
+                "classroom__class_teacher",
+                "classroom__class_teacher__user",
+            ),
+            id=id,
+            parent=parent,
+        )
+
+        classroom = student.classroom
+
+        teacher = (
+            classroom.class_teacher
+            if classroom
+            else None
+        )
+
+        # ==============================================
+        # Attendance
+        # ==============================================
+
+        attendance = Attendance.objects.filter(
+            student=student
+        )
+
         total = attendance.count()
-        present = attendance.filter(status=Attendance.Status.PRESENT).count()
-        attendance_percentage = round((present / total) * 100, 2) if total else 0
+
+        present = attendance.filter(
+            status=Attendance.Status.PRESENT
+        ).count()
+
+        attendance_percentage = (
+            round((present / total) * 100, 2)
+            if total > 0
+            else 0
+        )
+
+        # ==============================================
+        # Fees
+        # ==============================================
 
         fee_balance = (
-            StudentFee.objects.filter(student=student)
-            .aggregate(balance=Sum("balance"))["balance"] or 0
+            StudentFee.objects
+            .filter(student=student)
+            .aggregate(
+                balance=Sum("balance")
+            )["balance"]
+            or Decimal("0.00")
         )
+
+        # ==============================================
+        # Latest result
+        # ==============================================
 
         latest_result = (
-            StudentTermResult.objects.filter(student=student)
-            .order_by("-id").first()
+            StudentTermResult.objects
+            .filter(student=student)
+            .order_by("-id")
+            .first()
         )
 
+        # ==============================================
+        # Response data
+        # ==============================================
+
         data = {
+
             "id": student.id,
-            "photo": student.photo,
-            "admission_number": student.admission_number,
-            "assessment_number": student.assessment_number,
-            "first_name": student.first_name,
-            "last_name": student.last_name,
-            "gender": student.gender,
-            "date_of_birth": student.date_of_birth,
-            "grade": student.classroom.grade,
-            "stream": student.classroom.stream,
-            "class_teacher": teacher.user.get_full_name() if teacher else None,
-            "teacher_phone": teacher.user.phone_number if teacher else None,
-            "relationship": parent_student.relationship,
-            "date_admitted": student.date_admitted,
-            "status": student.status,
-            "attendance_percentage": attendance_percentage,
-            "latest_grade": latest_result.overall_grade if latest_result else "-",
-            "fee_balance": fee_balance,
+
+            "photo": (
+                student.photo.url
+                if student.photo
+                else None
+            ),
+
+            "admission_number":
+                student.admission_number,
+
+            "assessment_number":
+                student.assessment_number,
+
+            "first_name":
+                student.first_name,
+
+            "last_name":
+                student.last_name,
+
+            "gender":
+                student.gender,
+
+            "date_of_birth":
+                student.date_of_birth,
+
+            "grade": (
+                classroom.grade
+                if classroom
+                else None
+            ),
+
+            "stream": (
+                classroom.stream
+                if classroom
+                else None
+            ),
+
+            "class_teacher": (
+                teacher.user.get_full_name()
+                if teacher
+                else None
+            ),
+
+            "teacher_phone": (
+                teacher.user.phone_number
+                if teacher
+                else None
+            ),
+
+            # Direct parent-child relationship
+            "relationship": "Parent",
+
+            "date_admitted":
+                student.date_admitted,
+
+            "status":
+                student.status,
+
+            "attendance_percentage":
+                attendance_percentage,
+
+            "latest_grade": (
+                latest_result.overall_grade
+                if latest_result
+                else "-"
+            ),
+
+            "fee_balance":
+                fee_balance,
         }
 
-        serializer = ParentChildDetailsSerializer(data)
+        serializer = ParentChildDetailsSerializer(
+            data
+        )
+
         return Response(serializer.data)
 
 
