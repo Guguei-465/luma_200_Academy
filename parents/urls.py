@@ -1,14 +1,17 @@
-from django.urls import include, path
+from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from .views import ParentStudentViewSet
+from .views import ParentChildrenViewSet
+
 
 router = DefaultRouter()
+
 router.register(
-    r"",
-    ParentStudentViewSet,
-    basename="parent",
+    r"children",
+    ParentChildrenViewSet,
+    basename="parent-children"
 )
+
 
 urlpatterns = [
     path("", include(router.urls)),

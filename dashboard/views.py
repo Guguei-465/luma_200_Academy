@@ -11,7 +11,7 @@ from dashboard.permissions import IsAcademicCoordinator, IsDashboardUser, IsSupe
 from results.models import Result
 from students.models import Student
 from assignments.models import TeacherProfile, TeacherAssignment
-from parents.models import ParentProfile, ParentStudent
+from accounts.models import ParentProfile
 from classes.models import ClassRoom
 from subjects.models import Subject
 from attendance.models import Attendance

@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
-# 📌 Preserved your exact import spelling
+# Preserved your exact import spelling
 from notifiations.models import Notification
 from accounts.models import CustomUser
 
@@ -152,7 +152,7 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
                 created_count = len(notifications)
 
             return Response(
-                {"detail": f"✅ Resent successfully! Sent to {created_count} recipients."},
+                {"detail": f"Resent successfully! Sent to {created_count} recipients."},
                 status=status.HTTP_200_OK
             )
 

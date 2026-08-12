@@ -1,199 +1,350 @@
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 
-from rest_framework import generics, filters, status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
 
-from django_filters.rest_framework import DjangoFilterBackend
-
-from .models import Student, StudentTransfer
-from .serializers import (
+from accounts.models import ParentProfile
+from students.models import Student, StudentTransfer
+from students.serializers import (
     StudentSerializer,
+    StudentListSerializer,
     StudentTransferSerializer,
 )
 
-from accounts.permisions import IsAdminOrAcademicCoordinator
 
+# =====================================================
+# STUDENT LIST
+# GET /api/students/
+# =====================================================
 
-# ==========================================
-# List Students
-# ==========================================
-class StudentListView(generics.ListAPIView):
-    queryset = Student.objects.select_related(
-        "classroom",
-        "classroom__class_teacher__user",
-        "parent",
-        "parent__user",
-    )
+class StudentListView(APIView):
 
-    serializer_class = StudentSerializer
     permission_classes = [IsAuthenticated]
 
-    filter_backends = [
-        DjangoFilterBackend,
-        filters.SearchFilter,
-        filters.OrderingFilter,
-    ]
+    def get(self, request):
 
-    filterset_fields = [
-        "classroom",
-        "parent",
-        "gender",
-        "status",
-    ]
+        students = Student.objects.select_related(
+            "parent__user",
+            "classroom",
+        ).all()
 
-    search_fields = [
-        "admission_number",
-        "assessment_number",
-        "first_name",
-        "last_name",
-        "parent__user__first_name",
-        "parent__user__last_name",
-    ]
+        serializer = StudentListSerializer(
+            students,
+            many=True,
+            context={"request": request}
+        )
 
-    ordering_fields = [
-        "admission_number",
-        "first_name",
-        "last_name",
-        "date_admitted",
-        "created_at",
-    ]
-
-    ordering = [
-        "admission_number",
-    ]
+        return Response(serializer.data)
 
 
-# ==========================================
-# Retrieve Student
-# ==========================================
-class StudentDetailView(generics.RetrieveAPIView):
-    queryset = Student.objects.select_related(
-        "classroom",
-        "classroom__class_teacher__user",
-        "parent",
-        "parent__user",
-    )
+# =====================================================
+# STUDENT DETAIL
+# GET /api/students/int:pk/
+# =====================================================
 
-    serializer_class = StudentSerializer
+class StudentDetailView(APIView):
+
     permission_classes = [IsAuthenticated]
 
+    def get(self, request, pk):
 
-# ==========================================
-# Create Student
-# ==========================================
-class StudentCreateView(generics.CreateAPIView):
-    queryset = Student.objects.all()
-    serializer_class = StudentSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+        student = get_object_or_404(
+            Student.objects.select_related(
+                "parent__user",
+                "classroom",
+            ),
+            pk=pk
+        )
 
+        serializer = StudentSerializer(
+            student,
+            context={"request": request}
+        )
 
-# ==========================================
-# Update Student
-# ==========================================
-class StudentUpdateView(generics.UpdateAPIView):
-    queryset = Student.objects.all()
-    serializer_class = StudentSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
-
-
-# ==========================================
-# Delete Student
-# ==========================================
-class StudentDeleteView(generics.DestroyAPIView):
-    queryset = Student.objects.all()
-    serializer_class = StudentSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+        return Response(serializer.data)
 
 
-# ==========================================
-# Transfer Student
-# ==========================================
+# =====================================================
+# CREATE STUDENT
+# POST /api/students/create/
+# =====================================================
+
+class StudentCreateView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        serializer = StudentSerializer(
+            data=request.data,
+            context={"request": request}
+        )
+
+        if serializer.is_valid():
+
+            student = serializer.save()
+
+            return Response(
+                StudentSerializer(
+                    student,
+                    context={"request": request}
+                ).data,
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+# =====================================================
+# UPDATE STUDENT
+# PUT/PATCH /api/students/update/<int:pk>/
+# =====================================================
+
+class StudentUpdateView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, pk):
+
+        student = get_object_or_404(
+            Student,
+            pk=pk
+        )
+
+        serializer = StudentSerializer(
+            student,
+            data=request.data,
+            context={"request": request}
+        )
+
+        if serializer.is_valid():
+
+            student = serializer.save()
+
+            return Response(
+                StudentSerializer(
+                    student,
+                    context={"request": request}
+                ).data
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    def patch(self, request, pk):
+
+        student = get_object_or_404(
+            Student,
+            pk=pk
+        )
+
+        serializer = StudentSerializer(
+            student,
+            data=request.data,
+            partial=True,
+            context={"request": request}
+        )
+
+        if serializer.is_valid():
+
+            student = serializer.save()
+
+            return Response(
+                StudentSerializer(
+                    student,
+                    context={"request": request}
+                ).data
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+# =====================================================
+# DELETE STUDENT
+# DELETE /api/students/delete/<int:pk>/
+# =====================================================
+
+class StudentDeleteView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+
+        student = get_object_or_404(
+            Student,
+            pk=pk
+        )
+
+        student.delete()
+
+        return Response(
+            {
+                "message": "Student deleted successfully."
+            },
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+
+# =====================================================
+# STUDENT TRANSFER
+# POST /api/students/transfer/
+# =====================================================
+
 class StudentTransferView(APIView):
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [IsAuthenticated]
 
     @transaction.atomic
     def post(self, request):
 
         serializer = StudentTransferSerializer(
-            data=request.data
+            data=request.data,
+            context={"request": request}
         )
 
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         transfer = serializer.save(
             transferred_by=request.user
         )
 
+        # =============================================
+        # Update student's classroom
+        # =============================================
+
         student = transfer.student
+
         student.classroom = transfer.to_classroom
-        student.save()
+
+        student.save(
+            update_fields=[
+                "classroom",
+                "updated_at",
+            ]
+        )
 
         return Response(
-            {
-                "message": "Student transferred successfully.",
-                "transfer": StudentTransferSerializer(
-                    transfer
-                ).data,
-            },
-            status=status.HTTP_201_CREATED,
+            StudentTransferSerializer(
+                transfer,
+                context={"request": request}
+            ).data,
+            status=status.HTTP_201_CREATED
         )
 
 
-# ==========================================
-# List Student Transfers
-# ==========================================
-class StudentTransferListView(generics.ListAPIView):
-    queryset = StudentTransfer.objects.select_related(
-        "student",
-        "from_classroom",
-        "to_classroom",
-        "transferred_by",
-    )
+# =====================================================
+# TRANSFER LIST
+# GET /api/students/transfers/
+# =====================================================
 
-    serializer_class = StudentTransferSerializer
+class StudentTransferListView(APIView):
+
     permission_classes = [IsAuthenticated]
 
-    filter_backends = [
-        DjangoFilterBackend,
-        filters.SearchFilter,
-        filters.OrderingFilter,
-    ]
+    def get(self, request):
 
-    filterset_fields = [
-        "student",
-        "from_classroom",
-        "to_classroom",
-        "transfer_date",
-    ]
+        transfers = StudentTransfer.objects.select_related(
+            "student",
+            "from_classroom",
+            "to_classroom",
+            "transferred_by",
+        ).all()
 
-    search_fields = [
-        "student__admission_number",
-        "student__first_name",
-        "student__last_name",
-    ]
+        serializer = StudentTransferSerializer(
+            transfers,
+            many=True,
+            context={"request": request}
+        )
 
-    ordering_fields = [
-        "transfer_date",
-        "created_at",
-    ]
-
-    ordering = [
-        "-transfer_date",
-    ]
+        return Response(serializer.data)
 
 
-# ==========================================
-# Retrieve Student Transfer
-# ==========================================
-class StudentTransferDetailView(generics.RetrieveAPIView):
-    queryset = StudentTransfer.objects.select_related(
-        "student",
-        "from_classroom",
-        "to_classroom",
-        "transferred_by",
-    )
+# =====================================================
+# TRANSFER DETAIL
+# GET /api/students/transfers/<int:pk>/
+# =====================================================
 
-    serializer_class = StudentTransferSerializer
+class StudentTransferDetailView(APIView):
+
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+
+        transfer = get_object_or_404(
+            StudentTransfer.objects.select_related(
+                "student",
+                "from_classroom",
+                "to_classroom",
+                "transferred_by",
+            ),
+            pk=pk
+        )
+
+        serializer = StudentTransferSerializer(
+            transfer,
+            context={"request": request}
+        )
+
+        return Response(serializer.data)
+
+
+# =====================================================
+# PARENT CHILDREN
+# GET /api/students/parent/children/
+# =====================================================
+
+class ParentChildrenView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        parent = ParentProfile.objects.filter(
+            user=request.user
+        ).first()
+
+        if not parent:
+            return Response(
+                {
+                    "children_count": 0,
+                    "children": [],
+                    "message": "Parent profile not found."
+                },
+                status=status.HTTP_200_OK
+            )
+
+        children = Student.objects.filter(
+            parent=parent
+        ).select_related(
+            "parent__user",
+            "classroom",
+        )
+
+        serializer = StudentListSerializer(
+            children,
+            many=True,
+            context={"request": request}
+        )
+
+        return Response(
+            {
+                "children_count": children.count(),
+                "children": serializer.data,
+            }
+        )

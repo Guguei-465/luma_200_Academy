@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from notifiations.services import create_notification
 from notifiations.models import Notification
-from parents.models import ParentStudent
+from accounts.models import ParentProfile
 from accounts.models import (
     CustomUser,
     TeacherProfile,

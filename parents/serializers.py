@@ -1,41 +1,87 @@
 from rest_framework import serializers
+from .models import ParentProfile
+from students.models import Student
 
-from .models import ParentStudent
 
+class ParentSerializer(serializers.ModelSerializer):
 
-class ParentStudentSerializer(serializers.ModelSerializer):
-    parent_name = serializers.CharField(
-        source="parent.user.get_full_name",
-        read_only=True,
+    full_name = serializers.SerializerMethodField()
+    phone_number = serializers.CharField(
+        source="user.phone_number",
+        read_only=True
     )
 
-    parent_user_id = serializers.IntegerField(
-        source="parent.user.id",
-        read_only=True,
-    )
-
-    parent_phone = serializers.CharField(
-        source="parent.user.phone_number",
-        read_only=True,
-    )
-
-    student_name = serializers.SerializerMethodField()
+    children_count = serializers.SerializerMethodField()
+    children = serializers.SerializerMethodField()
 
     class Meta:
-        model = ParentStudent
+        model = ParentProfile
+
         fields = [
             "id",
-            "parent",
-            "parent_name",
-            "parent_user_id",
-            "parent_phone",
-            "student",
-            "student_name",
-            "relationship",
+            "user",
+            "full_name",
+            "phone_number",
+            "occupation",
+            "address",
+            "children_count",
+            "children",
+            "created_at",
+            "updated_at",
         ]
 
-    def get_student_name(self, obj):
-        return (
-            f"{obj.student.first_name} "
-            f"{obj.student.last_name}"
-        )
+        read_only_fields = [
+            "id",
+            "full_name",
+            "phone_number",
+            "children_count",
+            "children",
+            "created_at",
+            "updated_at",
+        ]
+
+    # =================================================
+    # Parent full name
+    # =================================================
+
+    def get_full_name(self, obj):
+
+        return obj.user.get_full_name()
+
+    # =================================================
+    # Number of children
+    # =================================================
+
+    def get_children_count(self, obj):
+
+        return obj.children.count()
+
+    # =================================================
+    # Parent's children
+    # =================================================
+
+    def get_children(self, obj):
+
+        children = obj.children.select_related(
+            "classroom"
+        ).all()
+
+        return [
+            {
+                "id": student.id,
+                "admission_number": student.admission_number,
+                "assessment_number": student.assessment_number,
+                "first_name": student.first_name,
+                "last_name": student.last_name,
+                "gender": student.gender,
+                "date_of_birth": student.date_of_birth,
+                "classroom": student.classroom.id
+                if student.classroom else None,
+                "classroom_name": str(student.classroom)
+                if student.classroom else None,
+                "status": student.status,
+                "photo": student.photo.url
+                if student.photo else None,
+            }
+            for student in children
+        ]

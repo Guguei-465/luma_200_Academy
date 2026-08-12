@@ -1,13 +1,14 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 
-from accounts.models import CustomUser, ParentProfile
+from accounts.models import ParentProfile, CustomUser
 from classes.models import ClassRoom
 
 
 # =====================================================
 # Student
 # =====================================================
+
 class Student(models.Model):
 
     class Gender(models.TextChoices):
@@ -22,7 +23,7 @@ class Student(models.Model):
     admission_number = models.CharField(
         max_length=20,
         unique=True,
-        db_index=True,
+        db_index=True
     )
 
     assessment_number = models.CharField(
@@ -30,20 +31,20 @@ class Student(models.Model):
         unique=True,
         null=True,
         blank=True,
-        db_index=True,
+        db_index=True
     )
 
     first_name = models.CharField(
-        max_length=100,
+        max_length=100
     )
 
     last_name = models.CharField(
-        max_length=100,
+        max_length=100
     )
 
     gender = models.CharField(
         max_length=10,
-        choices=Gender.choices,
+        choices=Gender.choices
     )
 
     date_of_birth = models.DateField()
@@ -51,50 +52,54 @@ class Student(models.Model):
     classroom = models.ForeignKey(
         ClassRoom,
         on_delete=models.PROTECT,
-        related_name="students",
+        related_name="students"
     )
 
+    # =================================================
+    # ONE PARENT -> MANY STUDENTS
+    # =================================================
     parent = models.ForeignKey(
         ParentProfile,
         on_delete=models.PROTECT,
-        related_name="students",
+        related_name="children"
     )
 
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.ACTIVE,
+        default=Status.ACTIVE
     )
 
     photo = models.ImageField(
         upload_to="students/",
         blank=True,
-        null=True,
+        null=True
     )
 
     date_admitted = models.DateField(
-        auto_now_add=True,
+        auto_now_add=True
     )
 
     date_left = models.DateField(
         null=True,
-        blank=True,
+        blank=True
     )
 
     created_at = models.DateTimeField(
-        auto_now_add=True,
+        auto_now_add=True
     )
 
     updated_at = models.DateTimeField(
-        auto_now=True,
+        auto_now=True
     )
 
     class Meta:
         ordering = [
             "admission_number",
             "first_name",
-            "last_name",
+            "last_name"
         ]
+
         verbose_name = "Student"
         verbose_name_plural = "Students"
 
@@ -109,50 +114,52 @@ class Student(models.Model):
 # =====================================================
 # Student Transfer
 # =====================================================
+
 class StudentTransfer(models.Model):
 
     student = models.ForeignKey(
         Student,
         on_delete=models.CASCADE,
-        related_name="transfers",
+        related_name="transfers"
     )
 
     from_classroom = models.ForeignKey(
         ClassRoom,
         on_delete=models.PROTECT,
-        related_name="transfers_from",
+        related_name="transfers_from"
     )
 
     to_classroom = models.ForeignKey(
         ClassRoom,
         on_delete=models.PROTECT,
-        related_name="transfers_to",
+        related_name="transfers_to"
     )
 
     transferred_by = models.ForeignKey(
         CustomUser,
         on_delete=models.PROTECT,
-        related_name="student_transfers",
+        related_name="student_transfers"
     )
 
     reason = models.TextField(
-        blank=True,
+        blank=True
     )
 
     transfer_date = models.DateField(
-        auto_now_add=True,
+        auto_now_add=True
     )
 
     created_at = models.DateTimeField(
-        auto_now_add=True,
+        auto_now_add=True
     )
 
     updated_at = models.DateTimeField(
-        auto_now=True,
+        auto_now=True
     )
 
     class Meta:
         ordering = ["-transfer_date"]
+
         verbose_name = "Student Transfer"
         verbose_name_plural = "Student Transfers"
 
