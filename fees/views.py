@@ -274,56 +274,336 @@ class DarajaTokenAPIView(APIView):
 # STK Push
 # =====================================================
 
+# =====================================================
+# STK PUSH
+# =====================================================
+
 class StkPushAPIView(APIView):
-    permission_classes = [IsSuperAdminOrAccountant]
+
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
 
-        serializer = StkPushSerializer(
-            data=request.data
+        # =================================================
+        # GET DATA FROM REQUEST
+        # =================================================
+
+        student_id = request.data.get("student_id")
+        amount = request.data.get("amount")
+        phone_number = request.data.get("phone")
+
+        description = (
+            request.data.get("description")
+            or "School Fees"
         )
 
-        serializer.is_valid(
-            raise_exception=True
+        # =================================================
+        # VALIDATE REQUIRED FIELDS
+        # =================================================
+
+        if not student_id:
+            return Response(
+                {
+                    "success": False,
+                    "message": "student_id is required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not amount:
+            return Response(
+                {
+                    "success": False,
+                    "message": "amount is required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not phone_number:
+            return Response(
+                {
+                    "success": False,
+                    "message": "phone is required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # =================================================
+        # GET STUDENT
+        # =================================================
+
+        try:
+
+            student = Student.objects.select_related(
+                "parent",
+                "classroom",
+            ).get(
+                id=student_id
+            )
+
+        except Student.DoesNotExist:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "Student not found."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # =================================================
+        # AUTHORIZE USER
+        #
+        # Parent:
+        #   Can only pay for their own child.
+        #
+        # Accountant/Admin:
+        #   Can pay for any student.
+        # =================================================
+
+        user = request.user
+
+        is_parent = (
+            getattr(user, "role", None)
+            == "PARENT"
         )
 
-        student_fee = serializer.validated_data["student_fee"]
-        phone_number = serializer.validated_data["phone_number"]
-        amount = serializer.validated_data["amount"]
+        if is_parent:
+
+            if student.parent_id != getattr(
+                getattr(user, "parent_profile", None),
+                "id",
+                None
+            ):
+
+                return Response(
+                    {
+                        "success": False,
+                        "message":
+                        "You are not authorized to pay fees for this student."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        else:
+
+            # Only authorized staff can make payments
+            # for students who are not their children.
+
+            allowed_roles = [
+                "SUPER_ADMIN",
+                "ACCOUNTANT",
+                "ACADEMIC_COORDINATOR",
+            ]
+
+            if getattr(user, "role", None) not in allowed_roles:
+
+                return Response(
+                    {
+                        "success": False,
+                        "message":
+                        "You are not authorized to make this payment."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        # =================================================
+        # FIND STUDENT FEE ACCOUNT
+        # =================================================
+
+        student_fee = (
+            StudentFee.objects
+            .select_related(
+                "student",
+                "fee_structure",
+            )
+            .filter(
+                student=student
+            )
+            .order_by(
+                "-fee_structure__academic_year",
+                "-fee_structure__term",
+            )
+            .first()
+        )
+
+        if not student_fee:
+
+            return Response(
+                {
+                    "success": False,
+                    "message":
+                    "No fee account exists for this student."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # =================================================
+        # VALIDATE AMOUNT
+        # =================================================
+
+        try:
+
+            amount = int(float(amount))
+
+        except (ValueError, TypeError):
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid payment amount."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if amount < 100:
+
+            return Response(
+                {
+                    "success": False,
+                    "message":
+                    "Payment amount must be at least KES 100."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # =================================================
+        # CHECK REMAINING BALANCE
+        # =================================================
+
+        if amount > float(student_fee.balance):
+
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        f"Payment amount cannot exceed "
+                        f"the student's fee balance of "
+                        f"KES {student_fee.balance}."
+                    ),
+                    "balance": student_fee.balance,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # =================================================
+        # NORMALIZE PHONE NUMBER
+        # =================================================
+
+        phone_number = (
+            str(phone_number)
+            .replace(" ", "")
+            .replace("-", "")
+            .replace("+", "")
+        )
+
+        if phone_number.startswith("0"):
+
+            phone_number = (
+                "254"
+                + phone_number[1:]
+            )
+
+        elif phone_number.startswith("7"):
+
+            phone_number = (
+                "254"
+                + phone_number
+            )
+
+        if not phone_number.startswith("2547"):
+
+            return Response(
+                {
+                    "success": False,
+                    "message":
+                    "Invalid Kenyan M-Pesa phone number."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # =================================================
+        # RECEIVED BY
+        #
+        # Parents don't have accountant_profile.
+        # Therefore keep it None for parent payments.
+        # =================================================
 
         accountant = getattr(
-            request.user,
+            user,
             "accountant_profile",
             None,
         )
 
+        # =================================================
+        # CREATE PENDING PAYMENT
+        # =================================================
+
         payment = FeePayment.objects.create(
+
             student_fee=student_fee,
+
             amount=amount,
-            payment_method=FeePayment.PaymentMethod.MPESA,
-            payment_status=FeePayment.PaymentStatus.PENDING,
-            receipt_number=f"PENDING-{timezone.now().strftime('%Y%m%d%H%M%S%f')}",
+
+            payment_method=(
+                FeePayment.PaymentMethod.MPESA
+            ),
+
+            payment_status=(
+                FeePayment.PaymentStatus.PENDING
+            ),
+
+            receipt_number=(
+                f"PENDING-"
+                f"{timezone.now().strftime('%Y%m%d%H%M%S%f')}"
+            ),
+
             phone_number=phone_number,
+
             received_by=accountant,
         )
 
+        # =================================================
+        # SEND STK PUSH
+        # =================================================
+
         try:
+
             response = DarajaService.stk_push(
+
                 phone_number=phone_number,
+
                 amount=amount,
-                account_reference=str(student_fee.student.admission_number),
+
+                account_reference=str(
+                    student.admission_number
+                ),
+
                 transaction_desc=(
-                    f"School Fees - "
-                    f"{student_fee.student.first_name} "
-                    f"{student_fee.student.last_name}"
+                    description[:100]
+                    if description
+                    else (
+                        f"School Fees - "
+                        f"{student.first_name} "
+                        f"{student.last_name}"
+                    )
                 ),
             )
 
         except Exception as e:
 
-            payment.payment_status = FeePayment.PaymentStatus.FAILED
+            payment.payment_status = (
+                FeePayment.PaymentStatus.FAILED
+            )
+
             payment.result_description = str(e)
-            payment.save()
+
+            payment.save(
+                update_fields=[
+                    "payment_status",
+                    "result_description",
+                ]
+            )
 
             return Response(
                 {
@@ -332,27 +612,66 @@ class StkPushAPIView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-                
-        payment.merchant_request_id = response.get(
-            "MerchantRequestID",
-            ""
+
+        # =================================================
+        # SAVE SAFARICOM REQUEST IDS
+        # =================================================
+
+        payment.merchant_request_id = (
+            response.get(
+                "MerchantRequestID",
+                ""
+            )
         )
 
-        payment.checkout_request_id = response.get(
-            "CheckoutRequestID",
-            ""
+        payment.checkout_request_id = (
+            response.get(
+                "CheckoutRequestID",
+                ""
+            )
         )
 
-        payment.save()
+        payment.save(
+            update_fields=[
+                "merchant_request_id",
+                "checkout_request_id",
+            ]
+        )
+
+        # =================================================
+        # RESPONSE
+        # =================================================
 
         return Response(
             {
                 "success": True,
-                "message": "STK Push sent successfully.",
-                "payment_id": payment.id,
-                "merchant_request_id": payment.merchant_request_id,
-                "checkout_request_id": payment.checkout_request_id,
-                "customer_message": response.get(
+
+                "message":
+                "STK Push sent successfully.",
+
+                "payment_id":
+                payment.id,
+
+                "student_id":
+                student.id,
+
+                "student_name":
+                (
+                    f"{student.first_name} "
+                    f"{student.last_name}"
+                ),
+
+                "amount":
+                payment.amount,
+
+                "merchant_request_id":
+                payment.merchant_request_id,
+
+                "checkout_request_id":
+                payment.checkout_request_id,
+
+                "customer_message":
+                response.get(
                     "CustomerMessage"
                 ),
             },
@@ -360,10 +679,11 @@ class StkPushAPIView(APIView):
         )
     
 
+# =====================================================
+# MPESA CALLBACK
+# =====================================================
+
 class MpesaCallbackAPIView(APIView):
-    """
-    Receives STK Push callback from Safaricom.
-    """
 
     permission_classes = [AllowAny]
 
@@ -371,19 +691,30 @@ class MpesaCallbackAPIView(APIView):
 
         data = request.data
 
-        callback = data.get("Body", {}).get("stkCallback", {})
+        callback = (
+            data
+            .get("Body", {})
+            .get("stkCallback", {})
+        )
 
-        checkout_request_id = callback.get("CheckoutRequestID")
+        checkout_request_id = (
+            callback.get("CheckoutRequestID")
+        )
 
         if not checkout_request_id:
+
             return Response(
                 {
                     "ResultCode": 0,
-                    "ResultDesc": "No CheckoutRequestID."
+                    "ResultDesc":
+                    "No CheckoutRequestID."
                 }
             )
 
-        # Save callback payload
+        # =================================================
+        # SAVE CALLBACK
+        # =================================================
+
         MpesaCallbackLog.objects.get_or_create(
             checkout_request_id=checkout_request_id,
             defaults={
@@ -391,74 +722,156 @@ class MpesaCallbackAPIView(APIView):
             }
         )
 
+        # =================================================
+        # FIND PAYMENT
+        # =================================================
+
         try:
+
             payment = FeePayment.objects.get(
                 checkout_request_id=checkout_request_id
             )
 
         except FeePayment.DoesNotExist:
+
             return Response(
                 {
                     "ResultCode": 0,
-                    "ResultDesc": "Payment not found."
+                    "ResultDesc":
+                    "Payment not found."
                 }
             )
 
-        # Prevent duplicate processing
-        if payment.payment_status == FeePayment.PaymentStatus.SUCCESS:
+        # =================================================
+        # PREVENT DUPLICATE PROCESSING
+        # =================================================
+
+        if (
+            payment.payment_status
+            == FeePayment.PaymentStatus.SUCCESS
+        ):
+
             return Response(
                 {
                     "ResultCode": 0,
-                    "ResultDesc": "Already processed."
+                    "ResultDesc":
+                    "Already processed."
                 }
             )
 
-        result_code = callback.get("ResultCode")
-        result_desc = callback.get("ResultDesc")
+        result_code = callback.get(
+            "ResultCode"
+        )
 
-        payment.result_code = str(result_code)
-        payment.result_description = result_desc
+        result_desc = callback.get(
+            "ResultDesc"
+        )
+
+        payment.result_code = str(
+            result_code
+        )
+
+        payment.result_description = (
+            result_desc
+        )
+
+        # =================================================
+        # SUCCESS
+        # =================================================
 
         if result_code == 0:
 
             metadata = {}
 
-            for item in callback.get(
-                "CallbackMetadata",
-                {}
-            ).get(
-                "Item",
-                []
-            ):
-
-                metadata[item["Name"]] = item.get("Value")
-
-            payment.mpesa_receipt = metadata.get(
-                "MpesaReceiptNumber"
+            items = (
+                callback
+                .get("CallbackMetadata", {})
+                .get("Item", [])
             )
 
-            payment.phone_number = str(
+            for item in items:
+
+                name = item.get("Name")
+
+                if name:
+                    metadata[name] = item.get(
+                        "Value"
+                    )
+
+            # ---------------------------------------------
+            # M-PESA RECEIPT
+            # ---------------------------------------------
+
+            payment.mpesa_receipt = (
                 metadata.get(
-                    "PhoneNumber",
-                    ""
+                    "MpesaReceiptNumber"
                 )
             )
 
-            payment.transaction_date = timezone.now()
+            # ---------------------------------------------
+            # PHONE
+            # ---------------------------------------------
 
-            payment.payment_status = (
-                FeePayment.PaymentStatus.SUCCESS
+            if metadata.get("PhoneNumber"):
+
+                payment.phone_number = str(
+                    metadata.get(
+                        "PhoneNumber"
+                    )
+                )
+
+            # ---------------------------------------------
+            # TRANSACTION DATE
+            # ---------------------------------------------
+
+            payment.transaction_date = (
+                timezone.now()
             )
+
+            # ---------------------------------------------
+            # UPDATE PAYMENT + STUDENT FEE
+            # ---------------------------------------------
 
             with transaction.atomic():
 
+                # Lock fee account to prevent
+                # simultaneous callbacks/payments
+                student_fee = (
+                    StudentFee.objects
+                    .select_for_update()
+                    .get(
+                        id=payment.student_fee_id
+                    )
+                )
+
+                # Only add this payment once
+                student_fee.amount_paid = (
+                    student_fee.amount_paid
+                    + payment.amount
+                )
+
+                student_fee.balance = max(
+                    student_fee.total_fee
+                    - student_fee.amount_paid,
+                    0
+                )
+
+                student_fee.save(
+                    update_fields=[
+                        "amount_paid",
+                        "balance",
+                    ]
+                )
+
+                payment.payment_status = (
+                    FeePayment.PaymentStatus.SUCCESS
+                )
+
                 payment.save()
 
-                student_fee = payment.student_fee
-
-                student_fee.amount_paid += payment.amount
-
-                student_fee.save()
+        # =================================================
+        # FAILED / CANCELLED
+        # =================================================
 
         else:
 
@@ -466,7 +879,17 @@ class MpesaCallbackAPIView(APIView):
                 FeePayment.PaymentStatus.FAILED
             )
 
-            payment.save()
+            payment.save(
+                update_fields=[
+                    "result_code",
+                    "result_description",
+                    "payment_status",
+                ]
+            )
+
+        # =================================================
+        # ALWAYS ACKNOWLEDGE SAFARICOM
+        # =================================================
 
         return Response(
             {
