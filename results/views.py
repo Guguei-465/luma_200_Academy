@@ -5,7 +5,6 @@ from django.db import transaction
 from rest_framework import status
 from rest_framework.decorators import APIView, action
 from rest_framework.response import Response
-
 from accounts import serializers
 from students.models import Student
 from .models import (

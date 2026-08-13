@@ -19,7 +19,7 @@ from fees.models import FeePayment, StudentFee
 from exams.models import Exam
 from notifiations.models import Notification
 from results.models import StudentResult, StudentTermResult, ResultSubmission, Assessment
-
+from results.models import StudentResult, StudentTermResult
 from .serializers import (
     AttendanceSummarySerializer,
     DashboardFeeSummarySerializer,
@@ -1144,3 +1144,131 @@ class TeacherDashboardAPIView(APIView):
         serializer = TeacherDashboardSerializer(data)
 
         return Response(serializer.data)
+
+# =====================================================
+# PARENT REPORT CARDS
+# =====================================================
+
+class ParentReportCardsAPIView(APIView):
+    """
+    Returns report cards belonging only to the
+    children of the currently logged-in parent.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        # =============================================
+        # Find logged-in parent's profile
+        # =============================================
+
+        parent = ParentProfile.objects.filter(
+            user=request.user
+        ).first()
+
+        if not parent:
+            return Response(
+                {
+                    "detail": "Parent profile not found."
+                },
+                status=404
+            )
+
+        # =============================================
+        # Get ONLY this parent's children
+        # =============================================
+
+        students = Student.objects.filter(
+            parent=parent
+        ).select_related(
+            "classroom"
+        )
+
+        # =============================================
+        # Get term results for those children
+        # =============================================
+
+        term_results = (
+            StudentTermResult.objects
+            .filter(
+                student__in=students
+            )
+            .select_related(
+                "student",
+                "student__classroom",
+                "overall_grade",
+            )
+            .order_by(
+                "-academic_year",
+                "-term",
+                "student__first_name",
+                "student__last_name",
+            )
+        )
+
+        data = []
+
+        for result in term_results:
+
+            student = result.student
+            classroom = student.classroom
+
+            data.append({
+                "student_id": student.id,
+
+                "first_name": student.first_name,
+
+                "last_name": student.last_name,
+
+                "photo": student.photo,
+
+                "admission_number": student.admission_number,
+
+                "assessment_number": student.assessment_number,
+
+                "grade": (
+                    classroom.grade
+                    if classroom
+                    else ""
+                ),
+
+                "stream": (
+                    classroom.stream
+                    if classroom
+                    else ""
+                ),
+
+                "academic_year": result.academic_year,
+
+                "term": result.term,
+
+                "average_score": result.average_marks,
+
+                "grade_letter": (
+                    result.overall_grade.level
+                    if result.overall_grade
+                    else result.cbc_code or "—"
+                ),
+
+                "total_marks": result.total_marks,
+
+                "total_subjects": result.total_subjects,
+
+                "position": result.position,
+
+                "attendance_percentage": (
+                    result.attendance_percentage
+                ),
+
+                "class_teacher_comment": (
+                    result.class_teacher_comment
+                ),
+
+                "headteacher_comment": (
+                    result.headteacher_comment
+                ),
+            })
+
+        return Response(data)
+    

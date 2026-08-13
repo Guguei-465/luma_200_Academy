@@ -3,6 +3,7 @@ from .views import (
     DashboardAPIView,
     DashboardFeeSummaryAPIView,
     ExamPerformanceDashboardAPIView,
+    ParentReportCardsAPIView,
     RecentAdmissionsAPIView,
     RecentFeePaymentsAPIView,
     TodayAttendanceSummaryAPIView,
@@ -47,4 +48,9 @@ urlpatterns = [
     path("teacher/assessments/", TeacherAssessmentListAPIView.as_view(), name="teacher-assessment-list"),
     path("teacher/assessments/<int:pk>/", TeacherAssessmentDetailsAPIView.as_view(), name="teacher-assessment-details"),
     path("teacher/assessments/<int:pk>/save-marks/", TeacherSaveAssessmentMarksAPIView.as_view(), name="teacher-save-marks"),
+    path(
+        "parent/report-cards/",
+        ParentReportCardsAPIView.as_view(),
+        name="parent-report-cards"
+    ),
 ]
