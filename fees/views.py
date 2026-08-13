@@ -203,37 +203,44 @@ class AccountantDashboardAPIView(APIView):
 
 
 # =====================================================
-# Student Fee Dashboard
+# Student Fee Accounts — UPDATED 
 # =====================================================
-class StudentFeeDashboardAPIView(APIView):
+class StudentFeeViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Fee accounts list — filtered automatically by user role:
+    • Admin/Accountant → ALL fee records
+    • Parent → Only their own children's fee records
+    """
+    serializer_class = StudentFeeSerializer
+    permission_classes = [IsAuthenticated]
 
-    permission_classes = [
-        IsAuthenticated,
-        IsSuperAdminAccountantOrAcademicCoordinator,
-    ]
+    def get_queryset(self):
+        user = self.request.user
 
-    def get(self, request, student_id):
+        # Admin / Accountant / Academic Coordinator → see ALL
+        if hasattr(user, "role") and user.role in [
+            "SUPER_ADMIN",
+            "ACCOUNTANT",
+            "ACADEMIC_COORDINATOR",
+        ]:
+            return StudentFee.objects.select_related(
+                "student",
+                "fee_structure",
+                "fee_structure__classroom",
+            ).order_by("student__first_name")
 
-        queryset = StudentFee.objects.filter(
-            student_id=student_id
-        )
+        # Parent → see ONLY their children
+        if hasattr(user, "parent_profile"):
+            return StudentFee.objects.filter(
+                student__parent=user.parent_profile
+            ).select_related(
+                "student",
+                "fee_structure",
+                "fee_structure__classroom",
+            ).order_by("student__first_name")
 
-        if not queryset.exists():
-
-            return Response(
-                {
-                    "message":
-                    "No fee records found for this student."
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        serializer = StudentFeeSerializer(
-            queryset,
-            many=True,
-        )
-
-        return Response(serializer.data)
+        # Any other user → no records
+        return StudentFee.objects.none()
     
 
 # =====================================================
