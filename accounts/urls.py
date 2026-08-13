@@ -1,6 +1,6 @@
 from django.urls import include, path
 from .views import (
-    ChangePassword, DeleteUser, Login, Logout, Register,
+    ChangePassword, DeleteUser, Login, Logout, ParentList, Register,
     ResetPassword, RestoreUser, StudentProfileView, UpdateUser, UserDetail, test, UserList,
     AcademicCoordinatorProfileView,
     TeacherProfileView,
@@ -19,6 +19,7 @@ urlpatterns = [
     path("register/", Register, name="register"),
 
     # User Management
+    path("parents/", ParentList, name="parent-list"),
     path("users/", UserList, name="user-list"),
     path("users/<int:id>/", UserDetail, name="user-detail"),
     path("users/<int:id>/update/", UpdateUser, name="update-user"),

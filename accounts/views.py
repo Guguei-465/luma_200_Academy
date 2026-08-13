@@ -600,3 +600,29 @@ class StudentProfileView(generics.RetrieveUpdateAPIView):
             return StudentProfile.objects.get(user=self.request.user)
         except StudentProfile.DoesNotExist:
             raise NotFound("Student profile not found.")
+
+
+# ==========================================
+# LIST ALL PARENTS
+# ==========================================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def ParentList(request):
+
+    parents = (
+        ParentProfile.objects
+        .select_related("user")
+        .prefetch_related("children")
+        .order_by("user__first_name", "user__last_name")
+    )
+
+    serializer = ParentProfileSerializer(
+        parents,
+        many=True
+    )
+
+    return Response(
+        serializer.data,
+        status=status.HTTP_200_OK
+    )

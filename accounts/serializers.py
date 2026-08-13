@@ -31,6 +31,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_active",
             "created_at",
         ]
+
         read_only_fields = [
             "id",
             "created_at",
@@ -60,10 +61,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
+
         password = validated_data.pop("password")
 
         user = User(**validated_data)
+
         user.set_password(password)
+
         user.save()
 
         return user
@@ -76,9 +80,142 @@ class ParentProfileSerializer(serializers.ModelSerializer):
 
     user = UserSerializer(read_only=True)
 
+    # Parent user ID
+    parent_user_id = serializers.IntegerField(
+        source="user.id",
+        read_only=True
+    )
+
+    # Parent display name
+    parent_name = serializers.SerializerMethodField()
+
+    # Parent phone
+    parent_phone = serializers.CharField(
+        source="user.phone_number",
+        read_only=True
+    )
+
+    # First / primary student ID
+    student_id = serializers.SerializerMethodField()
+
+    # All students belonging to this parent
+    student_ids = serializers.SerializerMethodField()
+
+    # Student details
+    children = serializers.SerializerMethodField()
+
+    def get_parent_name(self, obj):
+        if obj.user:
+            full_name = (
+                f"{obj.user.first_name or ''} "
+                f"{obj.user.last_name or ''}"
+            ).strip()
+
+            return full_name or obj.user.username
+
+        return ""
+
+    def get_student_id(self, obj):
+        """
+        Return the first linked student's ID.
+
+        Useful when the parent has one child.
+        """
+        try:
+            students = obj.children.all()
+
+            first_student = students.first()
+
+            if first_student:
+                return first_student.id
+
+        except Exception:
+            pass
+
+        return None
+
+    def get_student_ids(self, obj):
+        """
+        Return IDs of ALL students linked to this parent.
+        """
+        try:
+            return list(
+                obj.children.values_list("id", flat=True)
+            )
+        except Exception:
+            return []
+
+    def get_children(self, obj):
+        """
+        Return useful information about every child.
+        """
+        try:
+            students = obj.children.all()
+
+            return [
+                {
+                    "id": student.id,
+
+                    "student_id": student.id,
+
+                    "admission_number": getattr(
+                        student,
+                        "admission_number",
+                        getattr(student, "admission_no", None)
+                    ),
+
+                    "name": (
+                        getattr(student, "name", None)
+                        or
+                        (
+                            f"{getattr(student, 'first_name', '')} "
+                            f"{getattr(student, 'last_name', '')}"
+                        ).strip()
+                    ),
+                }
+                for student in students
+            ]
+
+        except Exception:
+            return []
+
     class Meta:
         model = ParentProfile
-        fields = "__all__"
+
+        fields = [
+            "id",
+            "user",
+
+            # Parent information
+            "parent_user_id",
+            "parent_name",
+            "parent_phone",
+
+            # Parent profile
+            "occupation",
+            "address",
+
+            # Student relationship
+            "student_id",
+            "student_ids",
+            "children",
+
+            "created_at",
+            "updated_at",
+        ]
+
+        read_only_fields = [
+            "id",
+            "user",
+            "parent_user_id",
+            "parent_name",
+            "parent_phone",
+            "student_id",
+            "student_ids",
+            "children",
+            "created_at",
+            "updated_at",
+        ]
 
 
 # ==========================================
@@ -117,14 +254,23 @@ class AcademicCoordinatorProfileSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-
-# --- Student ---
+# ==========================================
+# Student Profile Serializer
+# ==========================================
 class StudentProfileSerializer(serializers.ModelSerializer):
+
     user = UserSerializer(read_only=True)
 
     class Meta:
         model = StudentProfile
+
         fields = [
-            "id", "user", "admission_number", "national_id",
-            "gender", "date_of_birth", "created_at", "updated_at"
-        ]        
+            "id",
+            "user",
+            "admission_number",
+            "national_id",
+            "gender",
+            "date_of_birth",
+            "created_at",
+            "updated_at",
+        ]
