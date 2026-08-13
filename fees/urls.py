@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     DarajaTokenAPIView,
     MpesaCallbackAPIView,
+    ReceiptByNumberAPIView,
     StkPushAPIView,
     FeeStructureViewSet,
     StudentFeeViewSet,
@@ -113,4 +114,5 @@ urlpatterns = [
         "",
         include(router.urls),
     ),
+    path("receipt/<str:receipt_number>/", ReceiptByNumberAPIView.as_view(), name="receipt-by-number"),
 ]

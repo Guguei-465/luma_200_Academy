@@ -1246,3 +1246,40 @@ class MpesaCallbackAPIView(APIView):
                 "ResultDesc": "Accepted",
             }
         )
+
+
+# =====================================================
+# Get Receipt by Receipt Number
+# =====================================================
+class ReceiptByNumberAPIView(APIView):
+    """Return payment/receipt details using receipt_number."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, receipt_number):
+        try:
+            payment = FeePayment.objects.select_related(
+                "student_fee",
+                "student_fee__student",
+            ).get(receipt_number=receipt_number)
+        except FeePayment.DoesNotExist:
+            return Response(
+                {"detail": "Receipt not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        data = {
+            "id": payment.id,
+            "receipt_number": payment.receipt_number,
+            "student_name": f"{payment.student_fee.student.first_name} {payment.student_fee.student.last_name}",
+            "admission_number": payment.student_fee.student.admission_number,
+            "amount": payment.amount,
+            "payment_method": payment.payment_method,
+            "payment_status": payment.payment_status,
+            "payment_date": payment.payment_date,
+            "phone_number": payment.phone_number,
+            "mpesa_receipt": payment.mpesa_receipt,
+            "result_description": payment.result_description,
+            "transaction_date": payment.transaction_date,
+        }
+
+        return Response(data)
