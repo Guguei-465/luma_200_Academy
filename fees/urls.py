@@ -1,7 +1,10 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import DarajaTokenAPIView, MpesaCallbackAPIView, StkPushAPIView
+
 from .views import (
+    DarajaTokenAPIView,
+    MpesaCallbackAPIView,
+    StkPushAPIView,
     FeeStructureViewSet,
     StudentFeeViewSet,
     FeePaymentViewSet,
@@ -9,7 +12,13 @@ from .views import (
     StudentFeeDashboardAPIView,
 )
 
+
 router = DefaultRouter()
+
+
+# =====================================================
+# FEE STRUCTURES
+# =====================================================
 
 router.register(
     r"fee-structures",
@@ -17,11 +26,21 @@ router.register(
     basename="fee-structure",
 )
 
+
+# =====================================================
+# STUDENT FEES
+# =====================================================
+
 router.register(
     r"student-fees",
     StudentFeeViewSet,
     basename="student-fee",
 )
+
+
+# =====================================================
+# PAYMENTS
+# =====================================================
 
 router.register(
     r"payments",
@@ -29,12 +48,26 @@ router.register(
     basename="fee-payment",
 )
 
+
+# =====================================================
+# URLS
+# =====================================================
+
 urlpatterns = [
+
+    # -------------------------------------------------
+    # DARAJA TOKEN
+    # -------------------------------------------------
+
     path(
         "daraja/token/",
         DarajaTokenAPIView.as_view(),
         name="daraja-token",
     ),
+
+    # -------------------------------------------------
+    # STK PUSH
+    # -------------------------------------------------
 
     path(
         "payments/stk-push/",
@@ -42,11 +75,19 @@ urlpatterns = [
         name="stk-push",
     ),
 
+    # -------------------------------------------------
+    # ACCOUNTANT DASHBOARD
+    # -------------------------------------------------
+
     path(
         "dashboard/",
         AccountantDashboardAPIView.as_view(),
         name="accountant-dashboard",
     ),
+
+    # -------------------------------------------------
+    # INDIVIDUAL STUDENT FEE DASHBOARD
+    # -------------------------------------------------
 
     path(
         "student/<int:student_id>/",
@@ -54,13 +95,22 @@ urlpatterns = [
         name="student-fee-dashboard",
     ),
 
+    # -------------------------------------------------
+    # MPESA CALLBACK
+    # -------------------------------------------------
+
     path(
         "mpesa/callback/",
         MpesaCallbackAPIView.as_view(),
         name="mpesa-callback",
     ),
 
-    
+    # -------------------------------------------------
+    # ROUTER URLS
+    # -------------------------------------------------
 
-    path("", include(router.urls)),
+    path(
+        "",
+        include(router.urls),
+    ),
 ]

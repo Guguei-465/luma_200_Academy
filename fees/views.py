@@ -1,22 +1,23 @@
 from django.db.models import Sum
-from .services import DarajaService
-from .serializers import StkPushSerializer
+from django.db import transaction
+from django.utils import timezone
+
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.utils import timezone
-from fees.services import DarajaService
+
+from .services import DarajaService
 from students.models import Student
-from django.db import transaction
-from rest_framework.permissions import AllowAny
+
 from .models import (
     FeeStructure,
     StudentFee,
     FeePayment,
-    MpesaCallbackLog, 
+    MpesaCallbackLog,
 )
+
 from .serializers import (
     FeeStructureSerializer,
     StudentFeeSerializer,
@@ -25,13 +26,13 @@ from .serializers import (
 
 from .permissions import (
     IsSuperAdminOrAccountant,
-    IsSuperAdminAccountantOrAcademicCoordinator,
 )
 
 
 # =====================================================
-# Fee Structure
+# FEE STRUCTURE
 # =====================================================
+
 class FeeStructureViewSet(viewsets.ModelViewSet):
 
     queryset = FeeStructure.objects.all().order_by(
@@ -40,6 +41,7 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
     )
 
     serializer_class = FeeStructureSerializer
+
     permission_classes = [
         IsAuthenticated,
         IsSuperAdminOrAccountant,
@@ -60,15 +62,13 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
         for student in students:
 
             _, was_created = StudentFee.objects.get_or_create(
-
                 student=student,
                 fee_structure=fee_structure,
-
                 defaults={
                     "total_fee": fee_structure.total_fee,
                     "amount_paid": 0,
                     "balance": fee_structure.total_fee,
-                }
+                },
             )
 
             if was_created:
@@ -87,37 +87,330 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
 
 
 # =====================================================
-# Student Fee Accounts
+# STUDENT FEE ACCOUNTS
 # =====================================================
-class StudentFeeViewSet(viewsets.ModelViewSet):
 
-    queryset = StudentFee.objects.select_related(
-        "student",
-        "fee_structure",
-        "fee_structure__classroom",
-    ).order_by(
-        "student__first_name",
-    )
+class StudentFeeViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Fee accounts.
+
+    SUPER_ADMIN / ACCOUNTANT / ACADEMIC_COORDINATOR:
+        Can view all fee records.
+
+    PARENT:
+        Can only view fee records belonging to their children.
+    """
 
     serializer_class = StudentFeeSerializer
 
     permission_classes = [
         IsAuthenticated,
-        IsSuperAdminOrAccountant,
     ]
 
+    def get_queryset(self):
+
+        user = self.request.user
+
+        # -------------------------------------------------
+        # STAFF
+        # -------------------------------------------------
+
+        if getattr(user, "role", None) in [
+            "SUPER_ADMIN",
+            "ACCOUNTANT",
+            "ACADEMIC_COORDINATOR",
+        ]:
+
+            return (
+                StudentFee.objects
+                .select_related(
+                    "student",
+                    "fee_structure",
+                    "fee_structure__classroom",
+                )
+                .order_by(
+                    "student__first_name",
+                )
+            )
+
+        # -------------------------------------------------
+        # PARENT
+        # -------------------------------------------------
+
+        if getattr(user, "role", None) == "PARENT":
+
+            parent_profile = getattr(
+                user,
+                "parent_profile",
+                None,
+            )
+
+            if not parent_profile:
+                return StudentFee.objects.none()
+
+            return (
+                StudentFee.objects
+                .filter(
+                    student__parent=parent_profile
+                )
+                .select_related(
+                    "student",
+                    "fee_structure",
+                    "fee_structure__classroom",
+                )
+                .order_by(
+                    "student__first_name",
+                )
+            )
+
+        # -------------------------------------------------
+        # OTHER USERS
+        # -------------------------------------------------
+
+        return StudentFee.objects.none()
+
 
 # =====================================================
-# Fee Payments
+# STUDENT FEE DASHBOARD
 # =====================================================
+
+class StudentFeeDashboardAPIView(APIView):
+    """
+    Return complete fee information for one student.
+
+    SUPER_ADMIN / ACCOUNTANT / ACADEMIC_COORDINATOR:
+        Can view any student.
+
+    PARENT:
+        Can only view their own child.
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def get(self, request, student_id):
+
+        user = request.user
+
+        # -------------------------------------------------
+        # GET STUDENT
+        # -------------------------------------------------
+
+        try:
+
+            student = (
+                Student.objects
+                .select_related(
+                    "parent",
+                    "classroom",
+                )
+                .get(
+                    id=student_id
+                )
+            )
+
+        except Student.DoesNotExist:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": "Student not found.",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # -------------------------------------------------
+        # AUTHORIZE USER
+        # -------------------------------------------------
+
+        role = getattr(
+            user,
+            "role",
+            None,
+        )
+
+        allowed_staff_roles = [
+            "SUPER_ADMIN",
+            "ACCOUNTANT",
+            "ACADEMIC_COORDINATOR",
+        ]
+
+        # -------------------------------------------------
+        # PARENT
+        # -------------------------------------------------
+
+        if role == "PARENT":
+
+            parent_profile = getattr(
+                user,
+                "parent_profile",
+                None,
+            )
+
+            if not parent_profile:
+
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Parent profile not found.",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if student.parent_id != parent_profile.id:
+
+                return Response(
+                    {
+                        "success": False,
+                        "message": (
+                            "You are not authorized to view "
+                            "this student's fees."
+                        ),
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        # -------------------------------------------------
+        # STAFF
+        # -------------------------------------------------
+
+        elif role not in allowed_staff_roles:
+
+            return Response(
+                {
+                    "success": False,
+                    "message": (
+                        "You are not authorized to view "
+                        "this student's fees."
+                    ),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # -------------------------------------------------
+        # GET FEE ACCOUNTS
+        # -------------------------------------------------
+
+        fee_accounts = (
+            StudentFee.objects
+            .filter(
+                student=student
+            )
+            .select_related(
+                "student",
+                "fee_structure",
+                "fee_structure__classroom",
+            )
+            .order_by(
+                "-fee_structure__academic_year",
+                "-fee_structure__term",
+            )
+        )
+
+        # -------------------------------------------------
+        # SERIALIZE
+        # -------------------------------------------------
+
+        serializer = StudentFeeSerializer(
+            fee_accounts,
+            many=True,
+        )
+
+        # -------------------------------------------------
+        # CALCULATE SUMMARY
+        # -------------------------------------------------
+
+        total_fee = sum(
+            float(fee.total_fee)
+            for fee in fee_accounts
+        )
+
+        total_paid = sum(
+            float(fee.amount_paid)
+            for fee in fee_accounts
+        )
+
+        total_balance = sum(
+            float(fee.balance)
+            for fee in fee_accounts
+        )
+
+        # -------------------------------------------------
+        # STUDENT CLASSROOM
+        # -------------------------------------------------
+
+        classroom_name = None
+
+        if student.classroom:
+            classroom_name = (
+                getattr(
+                    student.classroom,
+                    "name",
+                    None,
+                )
+                or getattr(
+                    student.classroom,
+                    "class_name",
+                    None,
+                )
+                or str(student.classroom)
+            )
+
+        # -------------------------------------------------
+        # RESPONSE
+        # -------------------------------------------------
+
+        return Response(
+            {
+                "success": True,
+
+                "student": {
+                    "id": student.id,
+
+                    "admission_number": (
+                        student.admission_number
+                    ),
+
+                    "first_name": (
+                        student.first_name
+                    ),
+
+                    "last_name": (
+                        student.last_name
+                    ),
+
+                    "classroom": classroom_name,
+                },
+
+                "summary": {
+                    "total_fee": total_fee,
+                    "total_paid": total_paid,
+                    "total_balance": total_balance,
+                },
+
+                "fee_accounts": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+# =====================================================
+# FEE PAYMENTS
+# =====================================================
+
 class FeePaymentViewSet(viewsets.ModelViewSet):
 
-    queryset = FeePayment.objects.select_related(
-        "student_fee",
-        "student_fee__student",
-        "received_by",
-    ).order_by(
-        "-payment_date",
+    queryset = (
+        FeePayment.objects
+        .select_related(
+            "student_fee",
+            "student_fee__student",
+            "received_by",
+        )
+        .order_by(
+            "-payment_date",
+        )
     )
 
     serializer_class = FeePaymentSerializer
@@ -127,7 +420,10 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
         IsSuperAdminOrAccountant,
     ]
 
-    @action(detail=False, methods=["get"])
+    @action(
+        detail=False,
+        methods=["get"],
+    )
     def successful(self, request):
 
         queryset = self.get_queryset().filter(
@@ -139,9 +435,14 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
             many=True,
         )
 
-        return Response(serializer.data)
+        return Response(
+            serializer.data
+        )
 
-    @action(detail=False, methods=["get"])
+    @action(
+        detail=False,
+        methods=["get"],
+    )
     def pending(self, request):
 
         queryset = self.get_queryset().filter(
@@ -153,12 +454,15 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
             many=True,
         )
 
-        return Response(serializer.data)
+        return Response(
+            serializer.data
+        )
 
 
 # =====================================================
-# Accountant Dashboard
+# ACCOUNTANT DASHBOARD
 # =====================================================
+
 class AccountantDashboardAPIView(APIView):
 
     permission_classes = [
@@ -189,7 +493,9 @@ class AccountantDashboardAPIView(APIView):
             or 0
         )
 
-        total_payments = FeePayment.objects.count()
+        total_payments = (
+            FeePayment.objects.count()
+        )
 
         return Response(
             {
@@ -203,48 +509,7 @@ class AccountantDashboardAPIView(APIView):
 
 
 # =====================================================
-# Student Fee Accounts — UPDATED 
-# =====================================================
-class StudentFeeViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Fee accounts list — filtered automatically by user role:
-    • Admin/Accountant → ALL fee records
-    • Parent → Only their own children's fee records
-    """
-    serializer_class = StudentFeeSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        user = self.request.user
-
-        # Admin / Accountant / Academic Coordinator → see ALL
-        if hasattr(user, "role") and user.role in [
-            "SUPER_ADMIN",
-            "ACCOUNTANT",
-            "ACADEMIC_COORDINATOR",
-        ]:
-            return StudentFee.objects.select_related(
-                "student",
-                "fee_structure",
-                "fee_structure__classroom",
-            ).order_by("student__first_name")
-
-        # Parent → see ONLY their children
-        if hasattr(user, "parent_profile"):
-            return StudentFee.objects.filter(
-                student__parent=user.parent_profile
-            ).select_related(
-                "student",
-                "fee_structure",
-                "fee_structure__classroom",
-            ).order_by("student__first_name")
-
-        # Any other user → no records
-        return StudentFee.objects.none()
-    
-
-# =====================================================
-# Test Daraja Connection
+# TEST DARAJA CONNECTION
 # =====================================================
 
 class DarajaTokenAPIView(APIView):
@@ -258,7 +523,10 @@ class DarajaTokenAPIView(APIView):
 
         try:
 
-            token = DarajaService.get_access_token()
+            token = (
+                DarajaService
+                .get_access_token()
+            )
 
             return Response(
                 {
@@ -277,9 +545,6 @@ class DarajaTokenAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-# =====================================================
-# STK Push
-# =====================================================
 
 # =====================================================
 # STK PUSH
@@ -287,65 +552,88 @@ class DarajaTokenAPIView(APIView):
 
 class StkPushAPIView(APIView):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated
+    ]
 
     def post(self, request):
 
-        # =================================================
-        # GET DATA FROM REQUEST
-        # =================================================
+        # -------------------------------------------------
+        # GET REQUEST DATA
+        # -------------------------------------------------
 
-        student_id = request.data.get("student_id")
-        amount = request.data.get("amount")
-        phone_number = request.data.get("phone")
+        student_id = request.data.get(
+            "student_id"
+        )
+
+        amount = request.data.get(
+            "amount"
+        )
+
+        phone_number = request.data.get(
+            "phone"
+        )
 
         description = (
             request.data.get("description")
             or "School Fees"
         )
 
-        # =================================================
-        # VALIDATE REQUIRED FIELDS
-        # =================================================
+        # -------------------------------------------------
+        # VALIDATION
+        # -------------------------------------------------
 
         if not student_id:
+
             return Response(
                 {
                     "success": False,
-                    "message": "student_id is required."
+                    "message": (
+                        "student_id is required."
+                    ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not amount:
+
             return Response(
                 {
                     "success": False,
-                    "message": "amount is required."
+                    "message": (
+                        "amount is required."
+                    ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not phone_number:
+
             return Response(
                 {
                     "success": False,
-                    "message": "phone is required."
+                    "message": (
+                        "phone is required."
+                    ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # =================================================
+        # -------------------------------------------------
         # GET STUDENT
-        # =================================================
+        # -------------------------------------------------
 
         try:
 
-            student = Student.objects.select_related(
-                "parent",
-                "classroom",
-            ).get(
-                id=student_id
+            student = (
+                Student.objects
+                .select_related(
+                    "parent",
+                    "classroom",
+                )
+                .get(
+                    id=student_id
+                )
             )
 
         except Student.DoesNotExist:
@@ -353,49 +641,52 @@ class StkPushAPIView(APIView):
             return Response(
                 {
                     "success": False,
-                    "message": "Student not found."
+                    "message": "Student not found.",
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # =================================================
+        # -------------------------------------------------
         # AUTHORIZE USER
-        #
-        # Parent:
-        #   Can only pay for their own child.
-        #
-        # Accountant/Admin:
-        #   Can pay for any student.
-        # =================================================
+        # -------------------------------------------------
 
         user = request.user
 
         is_parent = (
-            getattr(user, "role", None)
+            getattr(
+                user,
+                "role",
+                None,
+            )
             == "PARENT"
         )
 
         if is_parent:
 
-            if student.parent_id != getattr(
-                getattr(user, "parent_profile", None),
-                "id",
-                None
+            parent_profile = getattr(
+                user,
+                "parent_profile",
+                None,
+            )
+
+            if (
+                not parent_profile
+                or student.parent_id
+                != parent_profile.id
             ):
 
                 return Response(
                     {
                         "success": False,
-                        "message":
-                        "You are not authorized to pay fees for this student."
+                        "message": (
+                            "You are not authorized "
+                            "to pay fees for this student."
+                        ),
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
         else:
-
-            # Only authorized staff can make payments
-            # for students who are not their children.
 
             allowed_roles = [
                 "SUPER_ADMIN",
@@ -403,20 +694,29 @@ class StkPushAPIView(APIView):
                 "ACADEMIC_COORDINATOR",
             ]
 
-            if getattr(user, "role", None) not in allowed_roles:
+            if (
+                getattr(
+                    user,
+                    "role",
+                    None,
+                )
+                not in allowed_roles
+            ):
 
                 return Response(
                     {
                         "success": False,
-                        "message":
-                        "You are not authorized to make this payment."
+                        "message": (
+                            "You are not authorized "
+                            "to make this payment."
+                        ),
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-        # =================================================
-        # FIND STUDENT FEE ACCOUNT
-        # =================================================
+        # -------------------------------------------------
+        # GET FEE ACCOUNT
+        # -------------------------------------------------
 
         student_fee = (
             StudentFee.objects
@@ -439,26 +739,35 @@ class StkPushAPIView(APIView):
             return Response(
                 {
                     "success": False,
-                    "message":
-                    "No fee account exists for this student."
+                    "message": (
+                        "No fee account exists "
+                        "for this student."
+                    ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # =================================================
+        # -------------------------------------------------
         # VALIDATE AMOUNT
-        # =================================================
+        # -------------------------------------------------
 
         try:
 
-            amount = int(float(amount))
+            amount = int(
+                float(amount)
+            )
 
-        except (ValueError, TypeError):
+        except (
+            ValueError,
+            TypeError,
+        ):
 
             return Response(
                 {
                     "success": False,
-                    "message": "Invalid payment amount."
+                    "message": (
+                        "Invalid payment amount."
+                    ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -468,34 +777,41 @@ class StkPushAPIView(APIView):
             return Response(
                 {
                     "success": False,
-                    "message":
-                    "Payment amount must be at least KES 100."
+                    "message": (
+                        "Payment amount must be "
+                        "at least KES 100."
+                    ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # =================================================
-        # CHECK REMAINING BALANCE
-        # =================================================
+        # -------------------------------------------------
+        # CHECK BALANCE
+        # -------------------------------------------------
 
-        if amount > float(student_fee.balance):
+        if amount > float(
+            student_fee.balance
+        ):
 
             return Response(
                 {
                     "success": False,
                     "message": (
-                        f"Payment amount cannot exceed "
-                        f"the student's fee balance of "
+                        "Payment amount cannot "
+                        "exceed the student's "
+                        f"fee balance of "
                         f"KES {student_fee.balance}."
                     ),
-                    "balance": student_fee.balance,
+                    "balance": (
+                        student_fee.balance
+                    ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # =================================================
-        # NORMALIZE PHONE NUMBER
-        # =================================================
+        # -------------------------------------------------
+        # NORMALIZE PHONE
+        # -------------------------------------------------
 
         phone_number = (
             str(phone_number)
@@ -518,23 +834,24 @@ class StkPushAPIView(APIView):
                 + phone_number
             )
 
-        if not phone_number.startswith("2547"):
+        if not phone_number.startswith(
+            "2547"
+        ):
 
             return Response(
                 {
                     "success": False,
-                    "message":
-                    "Invalid Kenyan M-Pesa phone number."
+                    "message": (
+                        "Invalid Kenyan "
+                        "M-Pesa phone number."
+                    ),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # =================================================
+        # -------------------------------------------------
         # RECEIVED BY
-        #
-        # Parents don't have accountant_profile.
-        # Therefore keep it None for parent payments.
-        # =================================================
+        # -------------------------------------------------
 
         accountant = getattr(
             user,
@@ -542,9 +859,9 @@ class StkPushAPIView(APIView):
             None,
         )
 
-        # =================================================
-        # CREATE PENDING PAYMENT
-        # =================================================
+        # -------------------------------------------------
+        # CREATE PAYMENT
+        # -------------------------------------------------
 
         payment = FeePayment.objects.create(
 
@@ -561,7 +878,7 @@ class StkPushAPIView(APIView):
             ),
 
             receipt_number=(
-                f"PENDING-"
+                "PENDING-"
                 f"{timezone.now().strftime('%Y%m%d%H%M%S%f')}"
             ),
 
@@ -570,31 +887,31 @@ class StkPushAPIView(APIView):
             received_by=accountant,
         )
 
-        # =================================================
+        # -------------------------------------------------
         # SEND STK PUSH
-        # =================================================
+        # -------------------------------------------------
 
         try:
 
-            response = DarajaService.stk_push(
-
-                phone_number=phone_number,
-
-                amount=amount,
-
-                account_reference=str(
-                    student.admission_number
-                ),
-
-                transaction_desc=(
-                    description[:100]
-                    if description
-                    else (
-                        f"School Fees - "
-                        f"{student.first_name} "
-                        f"{student.last_name}"
-                    )
-                ),
+            response = (
+                DarajaService.stk_push(
+                    phone_number=phone_number,
+                    amount=amount,
+                    account_reference=(
+                        str(
+                            student.admission_number
+                        )
+                    ),
+                    transaction_desc=(
+                        description[:100]
+                        if description
+                        else (
+                            f"School Fees - "
+                            f"{student.first_name} "
+                            f"{student.last_name}"
+                        )
+                    ),
+                )
             )
 
         except Exception as e:
@@ -603,7 +920,9 @@ class StkPushAPIView(APIView):
                 FeePayment.PaymentStatus.FAILED
             )
 
-            payment.result_description = str(e)
+            payment.result_description = (
+                str(e)
+            )
 
             payment.save(
                 update_fields=[
@@ -620,21 +939,21 @@ class StkPushAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # =================================================
-        # SAVE SAFARICOM REQUEST IDS
-        # =================================================
+        # -------------------------------------------------
+        # SAVE DARAJA IDS
+        # -------------------------------------------------
 
         payment.merchant_request_id = (
             response.get(
                 "MerchantRequestID",
-                ""
+                "",
             )
         )
 
         payment.checkout_request_id = (
             response.get(
                 "CheckoutRequestID",
-                ""
+                "",
             )
         )
 
@@ -645,46 +964,46 @@ class StkPushAPIView(APIView):
             ]
         )
 
-        # =================================================
+        # -------------------------------------------------
         # RESPONSE
-        # =================================================
+        # -------------------------------------------------
 
         return Response(
             {
                 "success": True,
 
-                "message":
-                "STK Push sent successfully.",
+                "message": (
+                    "STK Push sent successfully."
+                ),
 
-                "payment_id":
-                payment.id,
+                "payment_id": payment.id,
 
-                "student_id":
-                student.id,
+                "student_id": student.id,
 
-                "student_name":
-                (
+                "student_name": (
                     f"{student.first_name} "
                     f"{student.last_name}"
                 ),
 
-                "amount":
-                payment.amount,
+                "amount": payment.amount,
 
-                "merchant_request_id":
-                payment.merchant_request_id,
+                "merchant_request_id": (
+                    payment.merchant_request_id
+                ),
 
-                "checkout_request_id":
-                payment.checkout_request_id,
+                "checkout_request_id": (
+                    payment.checkout_request_id
+                ),
 
-                "customer_message":
-                response.get(
-                    "CustomerMessage"
+                "customer_message": (
+                    response.get(
+                        "CustomerMessage"
+                    )
                 ),
             },
             status=status.HTTP_200_OK,
         )
-    
+
 
 # =====================================================
 # MPESA CALLBACK
@@ -692,7 +1011,9 @@ class StkPushAPIView(APIView):
 
 class MpesaCallbackAPIView(APIView):
 
-    permission_classes = [AllowAny]
+    permission_classes = [
+        AllowAny
+    ]
 
     def post(self, request):
 
@@ -705,7 +1026,9 @@ class MpesaCallbackAPIView(APIView):
         )
 
         checkout_request_id = (
-            callback.get("CheckoutRequestID")
+            callback.get(
+                "CheckoutRequestID"
+            )
         )
 
         if not checkout_request_id:
@@ -713,30 +1036,37 @@ class MpesaCallbackAPIView(APIView):
             return Response(
                 {
                     "ResultCode": 0,
-                    "ResultDesc":
-                    "No CheckoutRequestID."
+                    "ResultDesc": (
+                        "No CheckoutRequestID."
+                    ),
                 }
             )
 
-        # =================================================
+        # -------------------------------------------------
         # SAVE CALLBACK
-        # =================================================
+        # -------------------------------------------------
 
         MpesaCallbackLog.objects.get_or_create(
-            checkout_request_id=checkout_request_id,
+            checkout_request_id=(
+                checkout_request_id
+            ),
             defaults={
                 "payload": data,
-            }
+            },
         )
 
-        # =================================================
+        # -------------------------------------------------
         # FIND PAYMENT
-        # =================================================
+        # -------------------------------------------------
 
         try:
 
-            payment = FeePayment.objects.get(
-                checkout_request_id=checkout_request_id
+            payment = (
+                FeePayment.objects.get(
+                    checkout_request_id=(
+                        checkout_request_id
+                    )
+                )
             )
 
         except FeePayment.DoesNotExist:
@@ -744,14 +1074,15 @@ class MpesaCallbackAPIView(APIView):
             return Response(
                 {
                     "ResultCode": 0,
-                    "ResultDesc":
-                    "Payment not found."
+                    "ResultDesc": (
+                        "Payment not found."
+                    ),
                 }
             )
 
-        # =================================================
+        # -------------------------------------------------
         # PREVENT DUPLICATE PROCESSING
-        # =================================================
+        # -------------------------------------------------
 
         if (
             payment.payment_status
@@ -761,8 +1092,9 @@ class MpesaCallbackAPIView(APIView):
             return Response(
                 {
                     "ResultCode": 0,
-                    "ResultDesc":
-                    "Already processed."
+                    "ResultDesc": (
+                        "Already processed."
+                    ),
                 }
             )
 
@@ -782,9 +1114,9 @@ class MpesaCallbackAPIView(APIView):
             result_desc
         )
 
-        # =================================================
+        # -------------------------------------------------
         # SUCCESS
-        # =================================================
+        # -------------------------------------------------
 
         if result_code == 0:
 
@@ -792,22 +1124,31 @@ class MpesaCallbackAPIView(APIView):
 
             items = (
                 callback
-                .get("CallbackMetadata", {})
-                .get("Item", [])
+                .get(
+                    "CallbackMetadata",
+                    {},
+                )
+                .get(
+                    "Item",
+                    [],
+                )
             )
 
             for item in items:
 
-                name = item.get("Name")
+                name = item.get(
+                    "Name"
+                )
 
                 if name:
-                    metadata[name] = item.get(
-                        "Value"
+
+                    metadata[name] = (
+                        item.get("Value")
                     )
 
-            # ---------------------------------------------
-            # M-PESA RECEIPT
-            # ---------------------------------------------
+            # -------------------------------------------------
+            # MPESA RECEIPT
+            # -------------------------------------------------
 
             payment.mpesa_receipt = (
                 metadata.get(
@@ -815,34 +1156,36 @@ class MpesaCallbackAPIView(APIView):
                 )
             )
 
-            # ---------------------------------------------
+            # -------------------------------------------------
             # PHONE
-            # ---------------------------------------------
+            # -------------------------------------------------
 
-            if metadata.get("PhoneNumber"):
+            if metadata.get(
+                "PhoneNumber"
+            ):
 
-                payment.phone_number = str(
-                    metadata.get(
-                        "PhoneNumber"
+                payment.phone_number = (
+                    str(
+                        metadata.get(
+                            "PhoneNumber"
+                        )
                     )
                 )
 
-            # ---------------------------------------------
+            # -------------------------------------------------
             # TRANSACTION DATE
-            # ---------------------------------------------
+            # -------------------------------------------------
 
             payment.transaction_date = (
                 timezone.now()
             )
 
-            # ---------------------------------------------
-            # UPDATE PAYMENT + STUDENT FEE
-            # ---------------------------------------------
+            # -------------------------------------------------
+            # UPDATE FEE ACCOUNT
+            # -------------------------------------------------
 
             with transaction.atomic():
 
-                # Lock fee account to prevent
-                # simultaneous callbacks/payments
                 student_fee = (
                     StudentFee.objects
                     .select_for_update()
@@ -851,7 +1194,6 @@ class MpesaCallbackAPIView(APIView):
                     )
                 )
 
-                # Only add this payment once
                 student_fee.amount_paid = (
                     student_fee.amount_paid
                     + payment.amount
@@ -860,7 +1202,7 @@ class MpesaCallbackAPIView(APIView):
                 student_fee.balance = max(
                     student_fee.total_fee
                     - student_fee.amount_paid,
-                    0
+                    0,
                 )
 
                 student_fee.save(
@@ -876,9 +1218,9 @@ class MpesaCallbackAPIView(APIView):
 
                 payment.save()
 
-        # =================================================
+        # -------------------------------------------------
         # FAILED / CANCELLED
-        # =================================================
+        # -------------------------------------------------
 
         else:
 
@@ -894,13 +1236,13 @@ class MpesaCallbackAPIView(APIView):
                 ]
             )
 
-        # =================================================
-        # ALWAYS ACKNOWLEDGE SAFARICOM
-        # =================================================
+        # -------------------------------------------------
+        # ACKNOWLEDGE SAFARICOM
+        # -------------------------------------------------
 
         return Response(
             {
                 "ResultCode": 0,
-                "ResultDesc": "Accepted"
+                "ResultDesc": "Accepted",
             }
         )
