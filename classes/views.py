@@ -1,19 +1,18 @@
-from django.shortcuts import render
 from rest_framework import generics, filters
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
+
 from .models import ClassRoom
 from .serializers import ClassRoomSerializer
 from accounts.permisions import IsAdminOrAcademicCoordinator
 
 
-# Create your views here.
-# List all classrooms
 class ClassRoomListView(generics.ListAPIView):
     queryset = ClassRoom.objects.select_related(
         "class_teacher",
         "class_teacher__user",
-    )
+    ).order_by("-created_at")
+
     serializer_class = ClassRoomSerializer
     permission_classes = [IsAuthenticated]
 
@@ -42,29 +41,59 @@ class ClassRoomListView(generics.ListAPIView):
         "created_at",
     ]
 
-# Retrieve one classroom
+
 class ClassRoomDetailView(generics.RetrieveAPIView):
-    queryset = ClassRoom.objects.select_related("class_teacher", "class_teacher__user")
+    queryset = ClassRoom.objects.select_related(
+        "class_teacher",
+        "class_teacher__user",
+    )
+
     serializer_class = ClassRoomSerializer
     permission_classes = [IsAuthenticated]
 
 
-# Create classroom
 class ClassRoomCreateView(generics.CreateAPIView):
     queryset = ClassRoom.objects.all()
+
     serializer_class = ClassRoomSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
 
 
-# Update classroom
 class ClassRoomUpdateView(generics.UpdateAPIView):
-    queryset = ClassRoom.objects.all()
+    queryset = ClassRoom.objects.select_related(
+        "class_teacher",
+        "class_teacher__user",
+    )
+
     serializer_class = ClassRoomSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
+
+    # Allows both PUT and PATCH
+    http_method_names = [
+        "put",
+        "patch",
+        "options",
+        "head",
+    ]
 
 
-# Delete classroom
 class ClassRoomDeleteView(generics.DestroyAPIView):
     queryset = ClassRoom.objects.all()
+
     serializer_class = ClassRoomSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
+
+    http_method_names = [
+        "delete",
+        "options",
+        "head",
+    ]
