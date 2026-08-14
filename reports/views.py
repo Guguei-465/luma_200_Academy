@@ -1,440 +1,369 @@
 from django.shortcuts import render
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.utils import timezone
-from datetime import timedelta
+from django.utils.dateparse import parse_date
+from datetime import timedelta, datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Sum, Count
-from fees.models import (
-    StudentFee,
-    FeePayment,
-)
-from datetime import datetime
 from django.http import HttpResponse
 from django.db.models.functions import ExtractYear, ExtractMonth
+
+from fees.models import StudentFee, FeePayment
 from accounts.models import ParentProfile, TeacherProfile
 from assignments.models import TeacherAssignment
 from classes.models import ClassRoom
 from reports.serializers import (
-    ClassCapacityReportSerializer,
-    DashboardStatisticsSerializer,
-    FeeCollectionByTermSerializer,
-    FeeSummarySerializer,
-    MonthlyFeeCollectionSerializer,
-    NewAdmissionSerializer,
-    OutstandingBalanceSerializer,
-    ParentChildrenSerializer,
-    ParentContactSerializer,
-    ParentFeeReportSerializer,
-    ParentSummarySerializer,
-    SchoolSummarySerializer,
-    StudentGenderReportSerializer,
-    StudentStatusReportSerializer,
-    StudentSummarySerializer, 
-    StudentsByClassSerializer,
-    TeacherSummarySerializer,
-    TeacherWorkloadSerializer,
-    TeachersByClassSerializer,
-    TeachersBySubjectSerializer,
-    )
+    ClassCapacityReportSerializer, DashboardStatisticsSerializer,
+    FeeCollectionByTermSerializer, FeeSummarySerializer,
+    MonthlyFeeCollectionSerializer, NewAdmissionSerializer,
+    OutstandingBalanceSerializer, ParentChildrenSerializer,
+    ParentContactSerializer, ParentFeeReportSerializer,
+    ParentSummarySerializer, SchoolSummarySerializer,
+    StudentGenderReportSerializer, StudentStatusReportSerializer,
+    StudentSummarySerializer, StudentsByClassSerializer,
+    TeacherSummarySerializer, TeacherWorkloadSerializer,
+    TeachersByClassSerializer, TeachersBySubjectSerializer,
+)
 from students.models import Student
 from subjects.models import Subject
 
-# Create your views here. 
+# === Constants ===
+DATE_FORMAT = "%Y-%m-%d"
+CURRENCY = "KSh"
+REPORT_TITLES = {
+    "income": "Income Financial Report",
+    "expenses": "Expenses Financial Report",
+    "collection": "Fee Collection Report",
+    "profit-loss": "Profit & Loss Report",
+}
+
+# === Helpers ===
+def parse_date_param(date_str):
+    """Parse date string with explicit format validation."""
+    try:
+        return datetime.strptime(date_str, DATE_FORMAT).date()
+    except (ValueError, TypeError):
+        return None
+
+def get_fee_summary(student_fee_qs=None):
+    """Shared fee summary aggregator."""
+    qs = student_fee_qs or StudentFee.objects.all()
+    agg = qs.aggregate(total_fee=Sum("total_fee"), amount_paid=Sum("amount_paid"), balance=Sum("balance"))
+    return {k: v or 0 for k, v in agg.items()}
+
+def get_payment_qs(date_from, date_to, term=None):
+    """Shared payment queryset for reports & exports."""
+    qs = FeePayment.objects.filter(
+        payment_date__date__gte=date_from,
+        payment_date__date__lte=date_to,
+    ).select_related("student", "student__classroom")
+    if term:
+        qs = qs.filter(student__studentfee__fee_structure__term=term).distinct()
+    return qs
+
+# =========================================================
+# STUDENT REPORTS
+# =========================================================
 class StudentSummaryReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-
-        total_students = Student.objects.count()
-
-        male_students = Student.objects.filter(
-            gender__iexact="Male"
-        ).count()
-
-        female_students = Student.objects.filter(
-            gender__iexact="Female"
-        ).count()
-
-        serializer = StudentSummarySerializer({
-            "total_students": total_students,
-            "male_students": male_students,
-            "female_students": female_students,
-        })
-
-        return Response(serializer.data)
-
+        total = Student.objects.count()
+        male = Student.objects.filter(gender__iexact="Male").count()
+        female = Student.objects.filter(gender__iexact="Female").count()
+        return Response(StudentSummarySerializer({
+            "total_students": total, "male_students": male, "female_students": female,
+        }).data)
 
 class StudentsByClassReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
         report = (
-            Student.objects
-            .values("classroom__grade", "classroom__stream")
+            Student.objects.values("classroom__grade", "classroom__stream")
             .annotate(total_students=Count("id"))
             .order_by("classroom__grade", "classroom__stream")
         )
-
         data = [
-            {
-                "classroom": f"{item['classroom__grade']} {item['classroom__stream']}",
-                "total_students": item["total_students"],
-            }
-            for item in report
+            {"classroom": f"{i['classroom__grade']} {i['classroom__stream']}",
+             "total_students": i["total_students"]}
+            for i in report
         ]
+        return Response(StudentsByClassSerializer(data, many=True).data)
 
-        serializer = StudentsByClassSerializer(data, many=True)
-        return Response(serializer.data)
-    
 class StudentsByGenderReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-        report = (
-            Student.objects
-            .values("gender")
-            .annotate(total_students=Count("id"))
-            .order_by("gender")
-        )
-
-        serializer = StudentGenderReportSerializer(report, many=True)
-        return Response(serializer.data)
-
+        report = Student.objects.values("gender").annotate(
+            total_students=Count("id")
+        ).order_by("gender")
+        return Response(StudentGenderReportSerializer(report, many=True).data)
 
 class NewAdmissionsReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
         days = int(request.query_params.get("days", 30))
-
         start_date = timezone.now().date() - timedelta(days=days)
-
         students = Student.objects.filter(
             date_admitted__gte=start_date
         ).select_related("classroom").order_by("-date_admitted")
-
         data = [
-            {
-                "admission_number": student.admission_number,
-                "student_name": f"{student.first_name} {student.last_name}",
-                "classroom": str(student.classroom),
-                "date_admitted": student.date_admitted,
-            }
-            for student in students
+            {"admission_number": s.admission_number,
+             "student_name": f"{s.first_name} {s.last_name}",
+             "classroom": str(s.classroom), "date_admitted": s.date_admitted}
+            for s in students
         ]
+        return Response(NewAdmissionSerializer(data, many=True).data)
 
-        serializer = NewAdmissionSerializer(data, many=True)
-        return Response(serializer.data)
-    
+class StudentStatusReport(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        report = Student.objects.values("status").annotate(
+            total_students=Count("id")
+        ).order_by("status")
+        return Response(StudentStatusReportSerializer(report, many=True).data)
+
+# =========================================================
+# TEACHER REPORTS
+# =========================================================
 class TeacherSummaryReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-
-        total_teachers = TeacherProfile.objects.count()
-
-        male_teachers = TeacherProfile.objects.filter(
-            gender__iexact="Male"
-        ).count()
-
-        female_teachers = TeacherProfile.objects.filter(
-            gender__iexact="Female"
-        ).count()
-
-        serializer = TeacherSummarySerializer({
-            "total_teachers": total_teachers,
-            "male_teachers": male_teachers,
-            "female_teachers": female_teachers,
-        })
-
-        return Response(serializer.data)
-
+        total = TeacherProfile.objects.count()
+        male = TeacherProfile.objects.filter(gender__iexact="Male").count()
+        female = TeacherProfile.objects.filter(gender__iexact="Female").count()
+        return Response(TeacherSummarySerializer({
+            "total_teachers": total, "male_teachers": male, "female_teachers": female,
+        }).data)
 
 class TeachersByClassReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-        classrooms = (
-            ClassRoom.objects
-            .select_related("class_teacher__user")
-            .order_by("grade", "stream")
-        )
-
+        classrooms = ClassRoom.objects.select_related(
+            "class_teacher__user"
+        ).order_by("grade", "stream")
         data = []
-
-        for classroom in classrooms:
-            teacher = None
-
-            if classroom.class_teacher:
-                teacher = classroom.class_teacher.user.get_full_name()
-
-                if not teacher.strip():
-                    teacher = classroom.class_teacher.user.username
-
-            data.append({
-                "classroom": str(classroom),
-                "class_teacher": teacher,
-            })
-
-        serializer = TeachersByClassSerializer(data, many=True)
-        return Response(serializer.data)
-
+        for cl in classrooms:
+            t = None
+            if cl.class_teacher:
+                t = cl.class_teacher.user.get_full_name().strip() or cl.class_teacher.user.username
+            data.append({"classroom": str(cl), "class_teacher": t})
+        return Response(TeachersByClassSerializer(data, many=True).data)
 
 class TeachersBySubjectReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-        assignments = (
-            TeacherAssignment.objects
-            .select_related(
-                "teacher__user",
-                "subject",
-                "classroom"
-            )
-            .order_by(
-                "classroom__grade",
-                "classroom__stream",
-                "subject__name"
-            )
-        )
-
+        assignments = TeacherAssignment.objects.select_related(
+            "teacher__user", "subject", "classroom"
+        ).order_by("classroom__grade", "classroom__stream", "subject__name")
         data = []
-
-        for assignment in assignments:
-            teacher_name = assignment.teacher.user.get_full_name()
-
-            if not teacher_name.strip():
-                teacher_name = assignment.teacher.user.username
-
-            data.append({
-                "teacher": teacher_name,
-                "subject": assignment.subject.name,
-                "classroom": str(assignment.classroom),
-                "term": assignment.term,
-            })
-
-        serializer = TeachersBySubjectSerializer(data, many=True)
-        return Response(serializer.data)
-
+        for a in assignments:
+            tn = a.teacher.user.get_full_name().strip() or a.teacher.user.username
+            data.append({"teacher": tn, "subject": a.subject.name,
+                         "classroom": str(a.classroom), "term": a.term})
+        return Response(TeachersBySubjectSerializer(data, many=True).data)
 
 class TeacherWorkloadReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-        workload = (
-            TeacherAssignment.objects
-            .values(
-                "teacher__user__first_name",
-                "teacher__user__last_name",
-                "teacher__user__username",
-            )
-            .annotate(
-                total_assignments=Count("id"),
-                total_classes=Count("classroom", distinct=True),
-                total_subjects=Count("subject", distinct=True),
-            )
-            .order_by(
-                "teacher__user__first_name",
-                "teacher__user__last_name",
-            )
-        )
-
+        workload = TeacherAssignment.objects.values(
+            "teacher__user__first_name", "teacher__user__last_name", "teacher__user__username"
+        ).annotate(
+            total_assignments=Count("id"),
+            total_classes=Count("classroom", distinct=True),
+            total_subjects=Count("subject", distinct=True),
+        ).order_by("teacher__user__first_name", "teacher__user__last_name")
         data = []
+        for i in workload:
+            name = f"{i['teacher__user__first_name']} {i['teacher__user__last_name']}".strip()
+            name = name or i["teacher__user__username"]
+            data.append({"teacher": name, "total_assignments": i["total_assignments"],
+                         "total_classes": i["total_classes"], "total_subjects": i["total_subjects"]})
+        return Response(TeacherWorkloadSerializer(data, many=True).data)
 
-        for item in workload:
-            full_name = (
-                f"{item['teacher__user__first_name']} "
-                f"{item['teacher__user__last_name']}"
-            ).strip()
-
-            if not full_name:
-                full_name = item["teacher__user__username"]
-
-            data.append({
-                "teacher": full_name,
-                "total_assignments": item["total_assignments"],
-                "total_classes": item["total_classes"],
-                "total_subjects": item["total_subjects"],
-            })
-
-        serializer = TeacherWorkloadSerializer(data, many=True)
-        return Response(serializer.data)
-
-
-
+# =========================================================
+# FEE REPORTS
+# =========================================================
 class FeeSummaryReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-
-        summary = StudentFee.objects.aggregate(
-            total_fee=Sum("total_fee"),
-            amount_paid=Sum("amount_paid"),
-            balance=Sum("balance"),
-        )
-
-        serializer = FeeSummarySerializer({
-            "total_fee": summary["total_fee"] or 0,
-            "amount_paid": summary["amount_paid"] or 0,
-            "balance": summary["balance"] or 0,
-        })
-
-        return Response(serializer.data)
-
+        return Response(FeeSummarySerializer(get_fee_summary()).data)
 
 class OutstandingBalancesReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-        student_fees = (
-            StudentFee.objects
-            .filter(balance__gt=0)
-            .select_related(
-                "student",
-                "student__classroom",
-                "fee_structure",
-            )
-            .order_by("-balance")
-        )
-
-        data = []
-
-        for account in student_fees:
-            data.append({
-                "admission_number": account.student.admission_number,
-                "student_name": (
-                    f"{account.student.first_name} "
-                    f"{account.student.last_name}"
-                ),
-                "classroom": str(account.student.classroom),
-                "academic_year": account.fee_structure.academic_year,
-                "term": account.fee_structure.term,
-                "total_fee": account.total_fee,
-                "amount_paid": account.amount_paid,
-                "balance": account.balance,
-            })
-
-        serializer = OutstandingBalanceSerializer(data, many=True)
-        return Response(serializer.data)
-
+        accounts = StudentFee.objects.filter(balance__gt=0).select_related(
+            "student", "student__classroom", "fee_structure"
+        ).order_by("-balance")
+        data = [
+            {
+                "admission_number": a.student.admission_number,
+                "student_name": f"{a.student.first_name} {a.student.last_name}",
+                "classroom": str(a.student.classroom),
+                "academic_year": a.fee_structure.academic_year,
+                "term": a.fee_structure.term,
+                "total_fee": a.total_fee, "amount_paid": a.amount_paid, "balance": a.balance,
+            }
+            for a in accounts
+        ]
+        return Response(OutstandingBalanceSerializer(data, many=True).data)
 
 class FeeCollectionByTermReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-
-        report = (
-            StudentFee.objects
-            .values(
-                "fee_structure__academic_year",
-                "fee_structure__term",
-            )
-            .annotate(
-                total_fee=Sum("total_fee"),
-                amount_paid=Sum("amount_paid"),
-                balance=Sum("balance"),
-            )
-            .order_by(
-                "-fee_structure__academic_year",
-                "fee_structure__term",
-            )
-        )
-
-        data = []
-
-        for item in report:
-            data.append({
-                "academic_year": item["fee_structure__academic_year"],
-                "term": item["fee_structure__term"],
-                "total_fee": item["total_fee"] or 0,
-                "amount_paid": item["amount_paid"] or 0,
-                "balance": item["balance"] or 0,
-            })
-
-        serializer = FeeCollectionByTermSerializer(data, many=True)
-        return Response(serializer.data)
+        report = StudentFee.objects.values(
+            "fee_structure__academic_year", "fee_structure__term"
+        ).annotate(
+            total_fee=Sum("total_fee"), amount_paid=Sum("amount_paid"), balance=Sum("balance")
+        ).order_by("-fee_structure__academic_year", "fee_structure__term")
+        data = [
+            {
+                "academic_year": i["fee_structure__academic_year"],
+                "term": i["fee_structure__term"],
+                "total_fee": i["total_fee"] or 0,
+                "amount_paid": i["amount_paid"] or 0,
+                "balance": i["balance"] or 0,
+            }
+            for i in report
+        ]
+        return Response(FeeCollectionByTermSerializer(data, many=True).data)
 
 class MonthlyFeeCollectionReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
+        report = FeePayment.objects.annotate(
+            year=ExtractYear("payment_date"), month=ExtractMonth("payment_date")
+        ).values("year", "month").annotate(
+            total_payments=Count("id"), total_amount=Sum("amount")
+        ).order_by("-year", "-month")
+        return Response(MonthlyFeeCollectionSerializer(report, many=True).data)
 
-        report = (
-            FeePayment.objects
-            .annotate(
-                year=ExtractYear("payment_date"),
-                month=ExtractMonth("payment_date"),
-            )
-            .values("year", "month")
-            .annotate(
-                total_payments=Count("id"),
-                total_amount=Sum("amount"),
-            )
-            .order_by("-year", "-month")
-        )
+# =========================================================
+# PARENT REPORTS
+# =========================================================
+class ParentSummaryReport(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        total = ParentProfile.objects.count()
+        counts = ParentProfile.objects.annotate(cc=Count("students"))
+        one = counts.filter(cc=1).count()
+        multi = counts.filter(cc__gt=1).count()
+        return Response(ParentSummarySerializer({
+            "total_parents": total, "parents_with_one_child": one,
+            "parents_with_multiple_children": multi,
+        }).data)
 
-        serializer = MonthlyFeeCollectionSerializer(
-            report,
-            many=True
-        )
+class ParentContactReport(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        parents = ParentProfile.objects.select_related("user").annotate(
+            total_children=Count("students")
+        ).order_by("user__first_name", "user__last_name")
+        data = []
+        for p in parents:
+            name = p.user.get_full_name().strip() or p.user.username
+            data.append({
+                "parent_name": name, "phone_number": getattr(p.user, "phone_number", ""),
+                "address": p.address, "occupation": p.occupation, "total_children": p.total_children,
+            })
+        return Response(ParentContactSerializer(data, many=True).data)
 
-        return Response(serializer.data)
-    
+class ParentChildrenReport(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        parents = ParentProfile.objects.select_related("user").prefetch_related(
+            "students__classroom"
+        ).annotate(total_children=Count("students")).order_by("user__first_name", "user__last_name")
+        data = []
+        for p in parents:
+            name = p.user.get_full_name().strip() or p.user.username
+            children = [
+                {"admission_number": s.admission_number,
+                 "student_name": f"{s.first_name} {s.last_name}",
+                 "classroom": str(s.classroom), "status": s.status}
+                for s in p.students.all()
+            ]
+            data.append({
+                "parent_name": name, "phone_number": getattr(p.user, "phone_number", ""),
+                "total_children": p.total_children, "children": children,
+            })
+        return Response(ParentChildrenSerializer(data, many=True).data)
+
+class ParentFeeReport(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        parents = ParentProfile.objects.select_related("user").annotate(
+            total_children=Count("students")
+        ).order_by("user__first_name", "user__last_name")
+        data = []
+        for p in parents:
+            name = p.user.get_full_name().strip() or p.user.username
+            summary = get_fee_summary(StudentFee.objects.filter(student__parent=p))
+            data.append({
+                "parent_name": name, "phone_number": getattr(p.user, "phone_number", ""),
+                "total_children": p.total_children, **summary,
+            })
+        return Response(ParentFeeReportSerializer(data, many=True).data)
+
+class ParentsWithOutstandingBalancesReport(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        parents = ParentProfile.objects.select_related("user").annotate(
+            total_children=Count("students")
+        ).order_by("user__first_name", "user__last_name")
+        data = []
+        for p in parents:
+            name = p.user.get_full_name().strip() or p.user.username
+            summary = get_fee_summary(StudentFee.objects.filter(student__parent=p))
+            if summary["balance"] > 0:
+                data.append({
+                    "parent_name": name, "phone_number": getattr(p.user, "phone_number", ""),
+                    "total_children": p.total_children, **summary,
+                })
+        return Response(ParentFeeReportSerializer(data, many=True).data)
+
+# =========================================================
+# CLASS & SCHOOL SUMMARY
+# =========================================================
+class ClassCapacityReport(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        rooms = ClassRoom.objects.annotate(
+            current_students=Count("students")
+        ).order_by("grade", "stream")
+        data = [
+            {"classroom": str(r), "capacity": r.capacity,
+             "current_students": r.current_students,
+             "available_spaces": r.capacity - r.current_students}
+            for r in rooms
+        ]
+        return Response(ClassCapacityReportSerializer(data, many=True).data)
+
 class SchoolSummaryReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-
-        serializer = SchoolSummarySerializer({
+        return Response(SchoolSummarySerializer({
             "total_students": Student.objects.count(),
             "total_teachers": TeacherProfile.objects.count(),
             "total_classes": ClassRoom.objects.count(),
             "total_subjects": Subject.objects.count(),
-        })
-
-        return Response(serializer.data)
-
+        }).data)
 
 class DashboardStatisticsReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-
-        fee_summary = StudentFee.objects.aggregate(
-            total_fee=Sum("total_fee"),
-            amount_paid=Sum("amount_paid"),
-            balance=Sum("balance"),
-        )
-
+        fs = get_fee_summary()
         data = {
             "students": {
                 "total": Student.objects.count(),
-                "male": Student.objects.filter(
-                    gender__iexact="Male"
-                ).count(),
-                "female": Student.objects.filter(
-                    gender__iexact="Female"
-                ).count(),
+                "male": Student.objects.filter(gender__iexact="Male").count(),
+                "female": Student.objects.filter(gender__iexact="Female").count(),
             },
-
             "teachers": {
                 "total": TeacherProfile.objects.count(),
-                "male": TeacherProfile.objects.filter(
-                    gender__iexact="Male"
-                ).count(),
-                "female": TeacherProfile.objects.filter(
-                    gender__iexact="Female"
-                ).count(),
+                "male": TeacherProfile.objects.filter(gender__iexact="Male").count(),
+                "female": TeacherProfile.objects.filter(gender__iexact="Female").count(),
             },
-
-            "fees": {
-                "total_fee": fee_summary["total_fee"] or 0,
-                "amount_paid": fee_summary["amount_paid"] or 0,
-                "balance": fee_summary["balance"] or 0,
-            },
-
+            "fees": fs,
             "school": {
                 "classes": ClassRoom.objects.count(),
                 "subjects": Subject.objects.count(),
@@ -442,851 +371,160 @@ class DashboardStatisticsReport(APIView):
                 "generated_at": timezone.now(),
             },
         }
-
-        serializer = DashboardStatisticsSerializer(data)
-
-        return Response(serializer.data)
-
-# perents views
-class ParentSummaryReport(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-
-        total_parents = ParentProfile.objects.count()
-
-        parent_counts = (
-            ParentProfile.objects
-            .annotate(total_children=Count("students"))
-        )
-
-        parents_with_one_child = parent_counts.filter(
-            total_children=1
-        ).count()
-
-        parents_with_multiple_children = parent_counts.filter(
-            total_children__gt=1
-        ).count()
-
-        serializer = ParentSummarySerializer({
-            "total_parents": total_parents,
-            "parents_with_one_child": parents_with_one_child,
-            "parents_with_multiple_children": parents_with_multiple_children,
-        })
-
-        return Response(serializer.data)
-
-
-class ParentContactReport(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-
-        parents = (
-            ParentProfile.objects
-            .select_related("user")
-            .annotate(total_children=Count("students"))
-            .order_by("user__first_name", "user__last_name")
-        )
-
-        data = []
-
-        for parent in parents:
-            full_name = parent.user.get_full_name()
-            if not full_name.strip():
-                full_name = parent.user.username
-
-            data.append({
-                "parent_name": full_name,
-                "phone_number": parent.user.phone_number,
-                "address": parent.address,
-                "occupation": parent.occupation,
-                "total_children": parent.total_children,
-            })
-
-        serializer = ParentContactSerializer(data, many=True)
-        return Response(serializer.data)
-
-
-class ParentChildrenReport(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-
-        parents = (
-            ParentProfile.objects
-            .select_related("user")
-            .prefetch_related("students__classroom")
-            .annotate(total_children=Count("students"))
-            .order_by("user__first_name", "user__last_name")
-        )
-
-        data = []
-
-        for parent in parents:
-
-            full_name = parent.user.get_full_name()
-            if not full_name.strip():
-                full_name = parent.user.username
-
-            children = []
-
-            for student in parent.students.all():
-                children.append({
-                    "admission_number": student.admission_number,
-                    "student_name": f"{student.first_name} {student.last_name}",
-                    "classroom": str(student.classroom),
-                    "status": student.status,
-                })
-
-            data.append({
-                "parent_name": full_name,
-                "phone_number": parent.user.phone_number,
-                "total_children": parent.total_children,
-                "children": children,
-            })
-
-        serializer = ParentChildrenSerializer(data, many=True)
-        return Response(serializer.data)
-
-
-class ParentFeeReport(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-
-        parents = (
-            ParentProfile.objects
-            .select_related("user")
-            .annotate(total_children=Count("students"))
-            .order_by("user__first_name", "user__last_name")
-        )
-
-        data = []
-
-        for parent in parents:
-
-            full_name = parent.user.get_full_name()
-            if not full_name.strip():
-                full_name = parent.user.username
-
-            summary = StudentFee.objects.filter(
-                student__parent=parent
-            ).aggregate(
-                total_fee=Sum("total_fee"),
-                amount_paid=Sum("amount_paid"),
-                balance=Sum("balance"),
-            )
-
-            data.append({
-                "parent_name": full_name,
-                "phone_number": parent.user.phone_number,
-                "total_children": parent.total_children,
-                "total_fee": summary["total_fee"] or 0,
-                "amount_paid": summary["amount_paid"] or 0,
-                "balance": summary["balance"] or 0,
-            })
-
-        serializer = ParentFeeReportSerializer(data, many=True)
-        return Response(serializer.data)
-
-
-class ParentsWithOutstandingBalancesReport(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-
-        parents = (
-            ParentProfile.objects
-            .select_related("user")
-            .annotate(total_children=Count("students"))
-            .order_by("user__first_name", "user__last_name")
-        )
-
-        data = []
-
-        for parent in parents:
-
-            summary = StudentFee.objects.filter(
-                student__parent=parent
-            ).aggregate(
-                total_fee=Sum("total_fee"),
-                amount_paid=Sum("amount_paid"),
-                balance=Sum("balance"),
-            )
-
-            balance = summary["balance"] or 0
-
-            if balance <= 0:
-                continue
-
-            full_name = parent.user.get_full_name()
-            if not full_name.strip():
-                full_name = parent.user.username
-
-            data.append({
-                "parent_name": full_name,
-                "phone_number": parent.user.phone_number,
-                "total_children": parent.total_children,
-                "total_fee": summary["total_fee"] or 0,
-                "amount_paid": summary["amount_paid"] or 0,
-                "balance": balance,
-            })
-
-        serializer = ParentFeeReportSerializer(data, many=True)
-        return Response(serializer.data)
-
-# class?students
-class ClassCapacityReport(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-
-        classrooms = (
-            ClassRoom.objects
-            .annotate(current_students=Count("students"))
-            .order_by("grade", "stream")
-        )
-
-        data = []
-
-        for classroom in classrooms:
-            data.append({
-                "classroom": str(classroom),
-                "capacity": classroom.capacity,
-                "current_students": classroom.current_students,
-                "available_spaces": classroom.capacity - classroom.current_students,
-            })
-
-        serializer = ClassCapacityReportSerializer(
-            data,
-            many=True
-        )
-
-        return Response(serializer.data)
-
-
-class StudentStatusReport(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-
-        report = (
-            Student.objects
-            .values("status")
-            .annotate(total_students=Count("id"))
-            .order_by("status")
-        )
-
-        serializer = StudentStatusReportSerializer(
-            report,
-            many=True
-        )
-
-        return Response(serializer.data)
+        return Response(DashboardStatisticsSerializer(data).data)
 
 # =========================================================
-# FINANCIAL REPORT
+# FINANCIAL REPORTS
 # =========================================================
-
 class FinancialReport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
+        report_type = request.query_params.get("type", "income")
+        date_from_str = request.query_params.get("date_from")
+        date_to_str = request.query_params.get("date_to")
+        term = request.query_params.get("term")
 
-        report_type = request.query_params.get(
-            "type",
-            "income"
-        )
-
-        date_from = request.query_params.get(
-            "date_from"
-        )
-
-        date_to = request.query_params.get(
-            "date_to"
-        )
-
-        term = request.query_params.get(
-            "term"
-        )
-
-        # -------------------------------------------------
-        # VALIDATE DATES
-        # -------------------------------------------------
-
+        date_from = parse_date_param(date_from_str)
+        date_to = parse_date_param(date_to_str)
         if not date_from or not date_to:
-            return Response(
-                {
-                    "detail": "date_from and date_to are required."
-                },
-                status=400,
-            )
+            return Response({"detail": "date_from and date_to (YYYY-MM-DD) are required."}, status=400)
+        if date_from > date_to:
+            return Response({"detail": "Start date cannot be after end date."}, status=400)
 
-        try:
-            start_date = datetime.strptime(
-                date_from,
-                "%Y-%m-%d"
-            ).date()
+        payments_qs = get_payment_qs(date_from, date_to, term)
+        total_income = payments_qs.aggregate(t=Sum("amount"))["t"] or 0
 
-            end_date = datetime.strptime(
-                date_to,
-                "%Y-%m-%d"
-            ).date()
-
-        except ValueError:
-            return Response(
-                {
-                    "detail": "Dates must use YYYY-MM-DD format."
-                },
-                status=400,
-            )
-
-        if start_date > end_date:
-            return Response(
-                {
-                    "detail": "Start date cannot be after end date."
-                },
-                status=400,
-            )
-
-        # -------------------------------------------------
-        # FEE PAYMENTS
-        # -------------------------------------------------
-
-        payments = FeePayment.objects.filter(
-            payment_date__date__gte=start_date,
-            payment_date__date__lte=end_date,
-        ).select_related(
-            "student",
-            "student__classroom",
-        )
-
-        # -------------------------------------------------
-        # FILTER BY TERM
-        # -------------------------------------------------
-
+        fee_qs = StudentFee.objects.all()
         if term:
-            payments = payments.filter(
-                student__studentfee__fee_structure__term=term
-            ).distinct()
+            fee_qs = fee_qs.filter(fee_structure__term=term)
+        total_expected = fee_qs.aggregate(t=Sum("total_fee"))["t"] or 0
+        total_paid = fee_qs.aggregate(t=Sum("amount_paid"))["t"] or 0
+        total_pending = fee_qs.aggregate(t=Sum("balance"))["t"] or 0
+        collection_rate = (float(total_paid) / float(total_expected) * 100) if total_expected else 0
 
-        # -------------------------------------------------
-        # TOTAL INCOME
-        # -------------------------------------------------
+        details = [
+            {
+                "date": p.payment_date,
+                "student": f"{p.student.first_name} {p.student.last_name}",
+                "admission_number": p.student.admission_number,
+                "classroom": str(p.student.classroom) if p.student.classroom else "—",
+                "amount": float(p.amount or 0),
+            }
+            for p in payments_qs.order_by("-payment_date")
+        ]
 
-        total_income = payments.aggregate(
-            total=Sum("amount")
-        )["total"] or 0
-
-        # -------------------------------------------------
-        # DETAILS
-        # -------------------------------------------------
-
-        details = []
-
-        for payment in payments.order_by("-payment_date"):
-
-            student = payment.student
-
-            details.append({
-                "date": payment.payment_date,
-                "student": (
-                    f"{student.first_name} "
-                    f"{student.last_name}"
-                ),
-                "admission_number": (
-                    student.admission_number
-                ),
-                "classroom": (
-                    str(student.classroom)
-                    if student.classroom
-                    else "—"
-                ),
-                "amount": float(
-                    payment.amount or 0
-                ),
-            })
-
-        # -------------------------------------------------
-        # COLLECTION STATUS
-        # -------------------------------------------------
-
-        fee_filter = {}
-
-        if term:
-            fee_filter[
-                "fee_structure__term"
-            ] = term
-
-        student_fees = StudentFee.objects.filter(
-            **fee_filter
-        )
-
-        total_expected = student_fees.aggregate(
-            total=Sum("total_fee")
-        )["total"] or 0
-
-        total_paid = student_fees.aggregate(
-            total=Sum("amount_paid")
-        )["total"] or 0
-
-        total_pending = student_fees.aggregate(
-            total=Sum("balance")
-        )["total"] or 0
-
-        collection_rate = 0
-
-        if total_expected:
-            collection_rate = (
-                float(total_paid)
-                / float(total_expected)
-            ) * 100
-
-        # -------------------------------------------------
-        # RESPONSE
-        # -------------------------------------------------
+        base = {
+            "report_type": report_type, "date_from": date_from_str, "date_to": date_to_str,
+            "term": term, "collected": float(total_paid), "pending": float(total_pending),
+            "collection_rate": round(collection_rate, 2),
+        }
 
         if report_type == "collection":
-
-            return Response({
-                "report_type": "collection",
-                "date_from": date_from,
-                "date_to": date_to,
-                "term": term,
-
-                "collected": float(total_paid),
-                "pending": float(total_pending),
-
-                "collection_rate": round(
-                    collection_rate,
-                    2
-                ),
-
-                "details": details,
-            })
-
-        # -------------------------------------------------
-        # INCOME
-        # -------------------------------------------------
-
-        if report_type == "income":
-
-            return Response({
-                "report_type": "income",
-                "date_from": date_from,
-                "date_to": date_to,
-                "term": term,
-
-                "total_income": float(
-                    total_income
-                ),
-
-                "collected": float(
-                    total_paid
-                ),
-
-                "pending": float(
-                    total_pending
-                ),
-
-                "collection_rate": round(
-                    collection_rate,
-                    2
-                ),
-
-                "details": details,
-            })
-
-        # -------------------------------------------------
-        # EXPENSES
-        # -------------------------------------------------
-
-        if report_type == "expenses":
-
-            return Response({
-                "report_type": "expenses",
-                "date_from": date_from,
-                "date_to": date_to,
-                "term": term,
-
-                "total_expenses": 0,
-
-                "details": [],
-            })
-
-        # -------------------------------------------------
-        # PROFIT / LOSS
-        # -------------------------------------------------
-
-        if report_type == "profit-loss":
-
+            return Response({**base, "details": details})
+        elif report_type == "income":
+            return Response({**base, "total_income": float(total_income), "details": details})
+        elif report_type == "expenses":
+            return Response({**base, "total_expenses": 0, "details": []})
+        elif report_type == "profit-loss":
             total_expenses = 0
-
-            net_balance = (
-                float(total_income)
-                - total_expenses
-            )
-
             return Response({
-                "report_type": "profit-loss",
-                "date_from": date_from,
-                "date_to": date_to,
-                "term": term,
-
-                "total_income": float(
-                    total_income
-                ),
-
-                "total_expenses": float(
-                    total_expenses
-                ),
-
-                "net_balance": float(
-                    net_balance
-                ),
-
+                **base, "total_income": float(total_income),
+                "total_expenses": total_expenses, "net_balance": float(total_income - total_expenses),
                 "details": details,
             })
-
-        return Response(
-            {
-                "detail": (
-                    "Invalid report type. "
-                    "Use income, expenses, "
-                    "collection or profit-loss."
-                )
-            },
-            status=400,
-        )
-
+        return Response({"detail": "Invalid report type. Use income, expenses, collection or profit-loss."}, status=400)
 
 # =========================================================
 # FINANCIAL REPORT EXPORT
 # =========================================================
-
 class FinancialReportExport(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
+        report_type = request.query_params.get("type", "income")
+        date_from_str = request.query_params.get("date_from")
+        date_to_str = request.query_params.get("date_to")
+        term = request.query_params.get("term")
+        export_format = request.query_params.get("format", "csv").lower()
 
-        report_type = request.query_params.get(
-            "type",
-            "income"
-        )
-
-        date_from = request.query_params.get(
-            "date_from"
-        )
-
-        date_to = request.query_params.get(
-            "date_to"
-        )
-
-        term = request.query_params.get(
-            "term"
-        )
-
-        export_format = request.query_params.get(
-            "format",
-            "csv"
-        ).lower()
-
+        date_from = parse_date_param(date_from_str)
+        date_to = parse_date_param(date_to_str)
         if not date_from or not date_to:
-            return Response(
-                {
-                    "detail": (
-                        "date_from and date_to "
-                        "are required."
-                    )
-                },
-                status=400,
-            )
+            return Response({"detail": "date_from and date_to (YYYY-MM-DD) are required."}, status=400)
 
-        # -------------------------------------------------
-        # GET PAYMENTS
-        # -------------------------------------------------
+        payments = get_payment_qs(date_from, date_to, term).order_by("-payment_date")
 
-        payments = FeePayment.objects.filter(
-            payment_date__date__gte=date_from,
-            payment_date__date__lte=date_to,
-        ).select_related(
-            "student",
-            "student__classroom",
-        )
-
-        # -------------------------------------------------
-        # TERM
-        # -------------------------------------------------
-
-        if term:
-            payments = payments.filter(
-                student__studentfee__fee_structure__term=term
-            ).distinct()
-
-        # -------------------------------------------------
-        # CSV
-        # -------------------------------------------------
+        filename = f"{report_type}_report"
 
         if export_format == "csv":
-
             import csv
-
-            response = HttpResponse(
-                content_type="text/csv"
-            )
-
-            response[
-                "Content-Disposition"
-            ] = (
-                f'attachment; filename="{report_type}_report.csv"'
-            )
-
-            writer = csv.writer(response)
-
-            writer.writerow([
-                "Date",
-                "Student",
-                "Admission Number",
-                "Class",
-                "Amount",
-            ])
-
-            for payment in payments.order_by(
-                "-payment_date"
-            ):
-
-                student = payment.student
-
-                writer.writerow([
-                    payment.payment_date,
-                    (
-                        f"{student.first_name} "
-                        f"{student.last_name}"
-                    ),
-                    student.admission_number,
-                    (
-                        str(student.classroom)
-                        if student.classroom
-                        else "—"
-                    ),
-                    payment.amount,
+            resp = HttpResponse(content_type="text/csv")
+            resp["Content-Disposition"] = f'attachment; filename="{filename}.csv"'
+            w = csv.writer(resp)
+            w.writerow(["Date", "Student", "Admission Number", "Class", "Amount"])
+            for p in payments:
+                s = p.student
+                w.writerow([
+                    p.payment_date, f"{s.first_name} {s.last_name}",
+                    s.admission_number, str(s.classroom) if s.classroom else "—", p.amount,
                 ])
+            return resp
 
-            return response
-
-        # -------------------------------------------------
-        # XLSX
-        # -------------------------------------------------
-
-        if export_format == "xlsx":
-
+        elif export_format == "xlsx":
             try:
                 from openpyxl import Workbook
             except ImportError:
-                return Response(
-                    {
-                        "detail":
-                        "openpyxl is not installed."
-                    },
-                    status=500,
-                )
-
-            workbook = Workbook()
-
-            worksheet = workbook.active
-            worksheet.title = "Financial Report"
-
-            worksheet.append([
-                "Date",
-                "Student",
-                "Admission Number",
-                "Class",
-                "Amount",
-            ])
-
-            for payment in payments.order_by(
-                "-payment_date"
-            ):
-
-                student = payment.student
-
-                worksheet.append([
-                    str(payment.payment_date),
-                    (
-                        f"{student.first_name} "
-                        f"{student.last_name}"
-                    ),
-                    student.admission_number,
-                    (
-                        str(student.classroom)
-                        if student.classroom
-                        else "—"
-                    ),
-                    float(payment.amount or 0),
+                return Response({"detail": "openpyxl is not installed."}, status=500)
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Financial Report"
+            ws.append(["Date", "Student", "Admission Number", "Class", "Amount"])
+            for p in payments:
+                s = p.student
+                ws.append([
+                    str(p.payment_date), f"{s.first_name} {s.last_name}",
+                    s.admission_number, str(s.classroom) if s.classroom else "—",
+                    float(p.amount or 0),
                 ])
-
             from io import BytesIO
-
-            output = BytesIO()
-
-            workbook.save(output)
-
-            output.seek(0)
-
-            response = HttpResponse(
-                output.read(),
-                content_type=(
-                    "application/vnd.openxmlformats-"
-                    "officedocument.spreadsheetml.sheet"
-                ),
+            out = BytesIO()
+            wb.save(out)
+            out.seek(0)
+            resp = HttpResponse(
+                out.read(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
+            resp["Content-Disposition"] = f'attachment; filename="{filename}.xlsx"'
+            return resp
 
-            response[
-                "Content-Disposition"
-            ] = (
-                f'attachment; filename="{report_type}_report.xlsx"'
-            )
-
-            return response
-
-        # -------------------------------------------------
-        # PDF
-        # -------------------------------------------------
-
-        if export_format == "pdf":
-
+        elif export_format == "pdf":
             try:
                 from reportlab.pdfgen import canvas
             except ImportError:
-                return Response(
-                    {
-                        "detail":
-                        "reportlab is not installed."
-                    },
-                    status=500,
-                )
-
-            response = HttpResponse(
-                content_type="application/pdf"
-            )
-
-            response[
-                "Content-Disposition"
-            ] = (
-                f'attachment; filename="{report_type}_report.pdf"'
-            )
-
-            pdf = canvas.Canvas(response)
-
-            pdf.setTitle(
-                f"{report_type.title()} Financial Report"
-            )
-
-            pdf.drawString(
-                50,
-                800,
-                "Luma 2000 Academy"
-            )
-
-            pdf.drawString(
-                50,
-                780,
-                f"{report_type.title()} Financial Report"
-            )
-
-            pdf.drawString(
-                50,
-                760,
-                f"Period: {date_from} to {date_to}"
-            )
-
+                return Response({"detail": "reportlab is not installed."}, status=500)
+            resp = HttpResponse(content_type="application/pdf")
+            resp["Content-Disposition"] = f'attachment; filename="{filename}.pdf"'
+            pdf = canvas.Canvas(resp)
+            pdf.setTitle(REPORT_TITLES.get(report_type, "Financial Report"))
+            pdf.drawString(50, 800, "Luma 2000 Academy")
+            pdf.drawString(50, 780, REPORT_TITLES.get(report_type, "Financial Report"))
+            pdf.drawString(50, 760, f"Period: {date_from_str} to {date_to_str}")
             if term:
-                pdf.drawString(
-                    50,
-                    740,
-                    f"Term: {term}"
-                )
-
+                pdf.drawString(50, 740, f"Term: {term}")
             y = 700
-
-            pdf.drawString(
-                50,
-                y,
-                "Date"
-            )
-
-            pdf.drawString(
-                150,
-                y,
-                "Student"
-            )
-
-            pdf.drawString(
-                320,
-                y,
-                "Admission"
-            )
-
-            pdf.drawString(
-                430,
-                y,
-                "Amount"
-            )
-
+            for label, x in zip(["Date", "Student", "Admission", "Amount"], [50, 150, 320, 430]):
+                pdf.drawString(x, y, label)
             y -= 20
-
-            for payment in payments.order_by(
-                "-payment_date"
-            ):
-
-                student = payment.student
-
-                pdf.drawString(
-                    50,
-                    y,
-                    str(payment.payment_date)[:10]
-                )
-
-                pdf.drawString(
-                    150,
-                    y,
-                    (
-                        f"{student.first_name} "
-                        f"{student.last_name}"
-                    )[:25]
-                )
-
-                pdf.drawString(
-                    320,
-                    y,
-                    str(
-                        student.admission_number
-                    )
-                )
-
-                pdf.drawString(
-                    430,
-                    y,
-                    f"KSh {payment.amount}"
-                )
-
-                y -= 18
-
+            for p in payments:
+                s = p.student
                 if y < 50:
                     pdf.showPage()
                     y = 800
-
+                pdf.drawString(50, y, str(p.payment_date)[:10])
+                pdf.drawString(150, y, f"{s.first_name} {s.last_name}"[:25])
+                pdf.drawString(320, y, str(s.admission_number))
+                pdf.drawString(430, y, f"{CURRENCY} {p.amount}")
+                y -= 18
             pdf.save()
+            return resp
 
-            return response
-
-        return Response(
-            {
-                "detail": (
-                    "Invalid export format. "
-                    "Use pdf, xlsx or csv."
-                )
-            },
-            status=400,
-        )
+        return Response({"detail": "Invalid export format. Use pdf, xlsx or csv."}, status=400)
