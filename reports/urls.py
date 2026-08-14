@@ -5,44 +5,46 @@ from .views import (
     DashboardStatisticsReport,
     FeeCollectionByTermReport,
     FeeSummaryReport,
+    FinancialReport,
+    FinancialReportExport,
     MonthlyFeeCollectionReport,
     NewAdmissionsReport,
     OutstandingBalancesReport,
     ParentChildrenReport,
     ParentContactReport,
     ParentFeeReport,
-    ParentSummaryReport,
     ParentsWithOutstandingBalancesReport,
+    ParentSummaryReport,
     SchoolSummaryReport,
     StudentStatusReport,
     StudentSummaryReport,
     StudentsByClassReport,
     StudentsByGenderReport,
     TeacherSummaryReport,
-    TeacherWorkloadReport,
     TeachersByClassReport,
     TeachersBySubjectReport,
-    FinancialReport,
-    FinancialReportExport,
+    TeacherWorkloadReport,
 )
+
+app_name = "reports"  # 🔑 Recommended: add namespace for reverse lookups
 
 urlpatterns = [
     # =====================================================
     # FINANCIAL REPORTS
     # =====================================================
     path(
-        "generate/",
+        "financial/generate/",
         FinancialReport.as_view(),
         name="financial-report",
     ),
     path(
-        "export/",
+        "financial/export/",
         FinancialReportExport.as_view(),
         name="financial-report-export",
     ),
 
     # =====================================================
-    # SCHOOL / CLASS REPORTS
+    # SCHOOL REPORTS
     # =====================================================
     path(
         "school/class-capacity/",
