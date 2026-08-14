@@ -10,6 +10,8 @@ from fees.models import (
     StudentFee,
     FeePayment,
 )
+from datetime import datetime
+from django.http import HttpResponse
 from django.db.models.functions import ExtractYear, ExtractMonth
 from accounts.models import ParentProfile, TeacherProfile
 from assignments.models import TeacherAssignment
@@ -683,4 +685,608 @@ class StudentStatusReport(APIView):
 
         return Response(serializer.data)
 
+# =========================================================
+# FINANCIAL REPORT
+# =========================================================
 
+class FinancialReport(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        report_type = request.query_params.get(
+            "type",
+            "income"
+        )
+
+        date_from = request.query_params.get(
+            "date_from"
+        )
+
+        date_to = request.query_params.get(
+            "date_to"
+        )
+
+        term = request.query_params.get(
+            "term"
+        )
+
+        # -------------------------------------------------
+        # VALIDATE DATES
+        # -------------------------------------------------
+
+        if not date_from or not date_to:
+            return Response(
+                {
+                    "detail": "date_from and date_to are required."
+                },
+                status=400,
+            )
+
+        try:
+            start_date = datetime.strptime(
+                date_from,
+                "%Y-%m-%d"
+            ).date()
+
+            end_date = datetime.strptime(
+                date_to,
+                "%Y-%m-%d"
+            ).date()
+
+        except ValueError:
+            return Response(
+                {
+                    "detail": "Dates must use YYYY-MM-DD format."
+                },
+                status=400,
+            )
+
+        if start_date > end_date:
+            return Response(
+                {
+                    "detail": "Start date cannot be after end date."
+                },
+                status=400,
+            )
+
+        # -------------------------------------------------
+        # FEE PAYMENTS
+        # -------------------------------------------------
+
+        payments = FeePayment.objects.filter(
+            payment_date__date__gte=start_date,
+            payment_date__date__lte=end_date,
+        ).select_related(
+            "student",
+            "student__classroom",
+        )
+
+        # -------------------------------------------------
+        # FILTER BY TERM
+        # -------------------------------------------------
+
+        if term:
+            payments = payments.filter(
+                student__studentfee__fee_structure__term=term
+            ).distinct()
+
+        # -------------------------------------------------
+        # TOTAL INCOME
+        # -------------------------------------------------
+
+        total_income = payments.aggregate(
+            total=Sum("amount")
+        )["total"] or 0
+
+        # -------------------------------------------------
+        # DETAILS
+        # -------------------------------------------------
+
+        details = []
+
+        for payment in payments.order_by("-payment_date"):
+
+            student = payment.student
+
+            details.append({
+                "date": payment.payment_date,
+                "student": (
+                    f"{student.first_name} "
+                    f"{student.last_name}"
+                ),
+                "admission_number": (
+                    student.admission_number
+                ),
+                "classroom": (
+                    str(student.classroom)
+                    if student.classroom
+                    else "—"
+                ),
+                "amount": float(
+                    payment.amount or 0
+                ),
+            })
+
+        # -------------------------------------------------
+        # COLLECTION STATUS
+        # -------------------------------------------------
+
+        fee_filter = {}
+
+        if term:
+            fee_filter[
+                "fee_structure__term"
+            ] = term
+
+        student_fees = StudentFee.objects.filter(
+            **fee_filter
+        )
+
+        total_expected = student_fees.aggregate(
+            total=Sum("total_fee")
+        )["total"] or 0
+
+        total_paid = student_fees.aggregate(
+            total=Sum("amount_paid")
+        )["total"] or 0
+
+        total_pending = student_fees.aggregate(
+            total=Sum("balance")
+        )["total"] or 0
+
+        collection_rate = 0
+
+        if total_expected:
+            collection_rate = (
+                float(total_paid)
+                / float(total_expected)
+            ) * 100
+
+        # -------------------------------------------------
+        # RESPONSE
+        # -------------------------------------------------
+
+        if report_type == "collection":
+
+            return Response({
+                "report_type": "collection",
+                "date_from": date_from,
+                "date_to": date_to,
+                "term": term,
+
+                "collected": float(total_paid),
+                "pending": float(total_pending),
+
+                "collection_rate": round(
+                    collection_rate,
+                    2
+                ),
+
+                "details": details,
+            })
+
+        # -------------------------------------------------
+        # INCOME
+        # -------------------------------------------------
+
+        if report_type == "income":
+
+            return Response({
+                "report_type": "income",
+                "date_from": date_from,
+                "date_to": date_to,
+                "term": term,
+
+                "total_income": float(
+                    total_income
+                ),
+
+                "collected": float(
+                    total_paid
+                ),
+
+                "pending": float(
+                    total_pending
+                ),
+
+                "collection_rate": round(
+                    collection_rate,
+                    2
+                ),
+
+                "details": details,
+            })
+
+        # -------------------------------------------------
+        # EXPENSES
+        # -------------------------------------------------
+
+        if report_type == "expenses":
+
+            return Response({
+                "report_type": "expenses",
+                "date_from": date_from,
+                "date_to": date_to,
+                "term": term,
+
+                "total_expenses": 0,
+
+                "details": [],
+            })
+
+        # -------------------------------------------------
+        # PROFIT / LOSS
+        # -------------------------------------------------
+
+        if report_type == "profit-loss":
+
+            total_expenses = 0
+
+            net_balance = (
+                float(total_income)
+                - total_expenses
+            )
+
+            return Response({
+                "report_type": "profit-loss",
+                "date_from": date_from,
+                "date_to": date_to,
+                "term": term,
+
+                "total_income": float(
+                    total_income
+                ),
+
+                "total_expenses": float(
+                    total_expenses
+                ),
+
+                "net_balance": float(
+                    net_balance
+                ),
+
+                "details": details,
+            })
+
+        return Response(
+            {
+                "detail": (
+                    "Invalid report type. "
+                    "Use income, expenses, "
+                    "collection or profit-loss."
+                )
+            },
+            status=400,
+        )
+
+
+# =========================================================
+# FINANCIAL REPORT EXPORT
+# =========================================================
+
+class FinancialReportExport(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        report_type = request.query_params.get(
+            "type",
+            "income"
+        )
+
+        date_from = request.query_params.get(
+            "date_from"
+        )
+
+        date_to = request.query_params.get(
+            "date_to"
+        )
+
+        term = request.query_params.get(
+            "term"
+        )
+
+        export_format = request.query_params.get(
+            "format",
+            "csv"
+        ).lower()
+
+        if not date_from or not date_to:
+            return Response(
+                {
+                    "detail": (
+                        "date_from and date_to "
+                        "are required."
+                    )
+                },
+                status=400,
+            )
+
+        # -------------------------------------------------
+        # GET PAYMENTS
+        # -------------------------------------------------
+
+        payments = FeePayment.objects.filter(
+            payment_date__date__gte=date_from,
+            payment_date__date__lte=date_to,
+        ).select_related(
+            "student",
+            "student__classroom",
+        )
+
+        # -------------------------------------------------
+        # TERM
+        # -------------------------------------------------
+
+        if term:
+            payments = payments.filter(
+                student__studentfee__fee_structure__term=term
+            ).distinct()
+
+        # -------------------------------------------------
+        # CSV
+        # -------------------------------------------------
+
+        if export_format == "csv":
+
+            import csv
+
+            response = HttpResponse(
+                content_type="text/csv"
+            )
+
+            response[
+                "Content-Disposition"
+            ] = (
+                f'attachment; filename="{report_type}_report.csv"'
+            )
+
+            writer = csv.writer(response)
+
+            writer.writerow([
+                "Date",
+                "Student",
+                "Admission Number",
+                "Class",
+                "Amount",
+            ])
+
+            for payment in payments.order_by(
+                "-payment_date"
+            ):
+
+                student = payment.student
+
+                writer.writerow([
+                    payment.payment_date,
+                    (
+                        f"{student.first_name} "
+                        f"{student.last_name}"
+                    ),
+                    student.admission_number,
+                    (
+                        str(student.classroom)
+                        if student.classroom
+                        else "—"
+                    ),
+                    payment.amount,
+                ])
+
+            return response
+
+        # -------------------------------------------------
+        # XLSX
+        # -------------------------------------------------
+
+        if export_format == "xlsx":
+
+            try:
+                from openpyxl import Workbook
+            except ImportError:
+                return Response(
+                    {
+                        "detail":
+                        "openpyxl is not installed."
+                    },
+                    status=500,
+                )
+
+            workbook = Workbook()
+
+            worksheet = workbook.active
+            worksheet.title = "Financial Report"
+
+            worksheet.append([
+                "Date",
+                "Student",
+                "Admission Number",
+                "Class",
+                "Amount",
+            ])
+
+            for payment in payments.order_by(
+                "-payment_date"
+            ):
+
+                student = payment.student
+
+                worksheet.append([
+                    str(payment.payment_date),
+                    (
+                        f"{student.first_name} "
+                        f"{student.last_name}"
+                    ),
+                    student.admission_number,
+                    (
+                        str(student.classroom)
+                        if student.classroom
+                        else "—"
+                    ),
+                    float(payment.amount or 0),
+                ])
+
+            from io import BytesIO
+
+            output = BytesIO()
+
+            workbook.save(output)
+
+            output.seek(0)
+
+            response = HttpResponse(
+                output.read(),
+                content_type=(
+                    "application/vnd.openxmlformats-"
+                    "officedocument.spreadsheetml.sheet"
+                ),
+            )
+
+            response[
+                "Content-Disposition"
+            ] = (
+                f'attachment; filename="{report_type}_report.xlsx"'
+            )
+
+            return response
+
+        # -------------------------------------------------
+        # PDF
+        # -------------------------------------------------
+
+        if export_format == "pdf":
+
+            try:
+                from reportlab.pdfgen import canvas
+            except ImportError:
+                return Response(
+                    {
+                        "detail":
+                        "reportlab is not installed."
+                    },
+                    status=500,
+                )
+
+            response = HttpResponse(
+                content_type="application/pdf"
+            )
+
+            response[
+                "Content-Disposition"
+            ] = (
+                f'attachment; filename="{report_type}_report.pdf"'
+            )
+
+            pdf = canvas.Canvas(response)
+
+            pdf.setTitle(
+                f"{report_type.title()} Financial Report"
+            )
+
+            pdf.drawString(
+                50,
+                800,
+                "Luma 2000 Academy"
+            )
+
+            pdf.drawString(
+                50,
+                780,
+                f"{report_type.title()} Financial Report"
+            )
+
+            pdf.drawString(
+                50,
+                760,
+                f"Period: {date_from} to {date_to}"
+            )
+
+            if term:
+                pdf.drawString(
+                    50,
+                    740,
+                    f"Term: {term}"
+                )
+
+            y = 700
+
+            pdf.drawString(
+                50,
+                y,
+                "Date"
+            )
+
+            pdf.drawString(
+                150,
+                y,
+                "Student"
+            )
+
+            pdf.drawString(
+                320,
+                y,
+                "Admission"
+            )
+
+            pdf.drawString(
+                430,
+                y,
+                "Amount"
+            )
+
+            y -= 20
+
+            for payment in payments.order_by(
+                "-payment_date"
+            ):
+
+                student = payment.student
+
+                pdf.drawString(
+                    50,
+                    y,
+                    str(payment.payment_date)[:10]
+                )
+
+                pdf.drawString(
+                    150,
+                    y,
+                    (
+                        f"{student.first_name} "
+                        f"{student.last_name}"
+                    )[:25]
+                )
+
+                pdf.drawString(
+                    320,
+                    y,
+                    str(
+                        student.admission_number
+                    )
+                )
+
+                pdf.drawString(
+                    430,
+                    y,
+                    f"KSh {payment.amount}"
+                )
+
+                y -= 18
+
+                if y < 50:
+                    pdf.showPage()
+                    y = 800
+
+            pdf.save()
+
+            return response
+
+        return Response(
+            {
+                "detail": (
+                    "Invalid export format. "
+                    "Use pdf, xlsx or csv."
+                )
+            },
+            status=400,
+        )
