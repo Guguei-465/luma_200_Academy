@@ -1,32 +1,46 @@
-from rest_framework import generics, filters
+from django.db.models import Prefetch
+
+from rest_framework import generics, filters, viewsets
+from rest_framework.permissions import IsAuthenticated
+
 from django_filters.rest_framework import DjangoFilterBackend
+
 from accounts.models import TeacherProfile
-from .serializers import TeacherProfileSerializer
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
-from .models import TeacherAssignment
-from .serializers import TeacherAssignmentSerializer
 from accounts.permisions import IsAdminOrAcademicCoordinator
-from rest_framework import generics, filters
-from rest_framework.permissions import IsAuthenticated
-from django_filters.rest_framework import DjangoFilterBackend
-from .serializers import TeacherAssignmentSerializer
+
+from .models import TeacherAssignment
+from .serializers import (
+    TeacherAssignmentSerializer,
+    TeacherProfileSerializer,
+)
+
 
 # =====================================================
-# Create Assignment
+# CREATE ASSIGNMENT
 # =====================================================
+
 class TeacherAssignmentCreateView(generics.CreateAPIView):
+
     queryset = TeacherAssignment.objects.all()
+
     serializer_class = TeacherAssignmentSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
 
 
 # =====================================================
-# List Assignments
+# LIST ASSIGNMENTS
 # =====================================================
+
 class TeacherAssignmentListView(generics.ListAPIView):
+
     serializer_class = TeacherAssignmentSerializer
-    permission_classes = [IsAuthenticated]
+
+    permission_classes = [
+        IsAuthenticated
+    ]
 
     filter_backends = [
         DjangoFilterBackend,
@@ -48,6 +62,7 @@ class TeacherAssignmentListView(generics.ListAPIView):
         "teacher__user__first_name",
         "teacher__user__last_name",
         "teacher__user__username",
+        "teacher__employee_number",
         "subject__name",
         "classroom__grade",
         "classroom__stream",
@@ -60,9 +75,12 @@ class TeacherAssignmentListView(generics.ListAPIView):
         "created_at",
     ]
 
-    ordering = ["-created_at"]
+    ordering = [
+        "-created_at"
+    ]
 
     def get_queryset(self):
+
         user = self.request.user
 
         queryset = TeacherAssignment.objects.select_related(
@@ -71,56 +89,111 @@ class TeacherAssignmentListView(generics.ListAPIView):
             "subject",
         )
 
-        # Super Admin and Academic Coordinator see all assignments
-        if user.role in ["SUPER_ADMIN", "ACADEMIC_COORDINATOR"]:
+        # =================================================
+        # ADMIN / ACADEMIC COORDINATOR
+        # =================================================
+
+        if user.role in [
+            "SUPER_ADMIN",
+            "ACADEMIC_COORDINATOR",
+        ]:
             return queryset
 
-        # Teacher sees only their own active assignments
+        # =================================================
+        # TEACHER
+        # =================================================
+
         if user.role == "TEACHER":
+
             return queryset.filter(
                 teacher__user=user,
                 is_active=True,
             )
 
-        # Everyone else gets no assignments
-        return TeacherAssignment.objects.none()
+        # =================================================
+        # OTHER USERS
+        # =================================================
+
+        return queryset.none()
 
 
 # =====================================================
-# Retrieve Assignment
+# RETRIEVE ASSIGNMENT
 # =====================================================
+
 class TeacherAssignmentDetailView(generics.RetrieveAPIView):
+
     queryset = TeacherAssignment.objects.select_related(
         "teacher__user",
         "classroom",
         "subject",
     )
+
     serializer_class = TeacherAssignmentSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
 
 
 # =====================================================
-# Update Assignment
+# UPDATE ASSIGNMENT
 # =====================================================
+
 class TeacherAssignmentUpdateView(generics.UpdateAPIView):
+
     queryset = TeacherAssignment.objects.all()
+
     serializer_class = TeacherAssignmentSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
 
 
 # =====================================================
-# Delete Assignment
+# DELETE ASSIGNMENT
 # =====================================================
+
 class TeacherAssignmentDeleteView(generics.DestroyAPIView):
-    queryset = TeacherAssignment.objects.all()
-    serializer_class = TeacherAssignmentSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
 
+    queryset = TeacherAssignment.objects.all()
+
+    serializer_class = TeacherAssignmentSerializer
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
+
+
+# =====================================================
+# TEACHER PROFILE
+# =====================================================
 
 class TeacherProfileViewSet(viewsets.ModelViewSet):
+
     serializer_class = TeacherProfileSerializer
-    permission_classes = [IsAuthenticated]
+
+    permission_classes = [
+        IsAuthenticated
+    ]
 
     def get_queryset(self):
-        return TeacherProfile.objects.filter(user=self.request.user)
- 
+
+        user = self.request.user
+
+        # Admin and coordinator can see all teachers
+        if user.role in [
+            "SUPER_ADMIN",
+            "ACADEMIC_COORDINATOR",
+        ]:
+            return TeacherProfile.objects.select_related(
+                "user"
+            ).all()
+
+        # Teacher can see own profile
+        return TeacherProfile.objects.filter(
+            user=user
+        ).select_related(
+            "user"
+        )
