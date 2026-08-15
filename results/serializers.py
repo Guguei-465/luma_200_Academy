@@ -51,6 +51,11 @@ class LearningOutcomeSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    classroom_name = serializers.CharField(
+        source="classroom.name",
+        read_only=True
+    )
+
     class Meta:
         model = LearningOutcome
         fields = "__all__"
@@ -63,7 +68,6 @@ class LearningOutcomeSerializer(serializers.ModelSerializer):
             )
 
         return value
-
 
 # ============================================================
 # ASSESSMENT TYPE

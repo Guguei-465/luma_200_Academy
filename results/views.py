@@ -113,6 +113,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
 class LearningOutcomeViewSet(viewsets.ModelViewSet):
 
     queryset = LearningOutcome.objects.select_related(
+        "classroom",
         "subject",
     )
 
@@ -122,7 +123,6 @@ class LearningOutcomeViewSet(viewsets.ModelViewSet):
         IsAuthenticated,
         IsTeacherOrAcademicCoordinator,
     ]
-
 
 # =====================================================
 # REPORT COMMENTS

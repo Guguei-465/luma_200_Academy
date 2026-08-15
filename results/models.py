@@ -70,6 +70,12 @@ class GradeScale(models.Model):
 
 class LearningOutcome(models.Model):
 
+    classroom = models.ForeignKey(
+        ClassRoom,
+        on_delete=models.CASCADE,
+        related_name="learning_outcomes",
+    )
+
     subject = models.ForeignKey(
         Subject,
         on_delete=models.CASCADE,
@@ -103,18 +109,29 @@ class LearningOutcome(models.Model):
     )
 
     class Meta:
-        unique_together = (
-            "subject",
-            "name",
-        )
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "classroom",
+                    "subject",
+                    "name",
+                ],
+                name="unique_learning_outcome_per_class_subject",
+            ),
+        ]
 
         ordering = [
+            "classroom",
             "subject",
             "name",
         ]
 
     def __str__(self):
-        return f"{self.subject} - {self.name}"
+        return (
+            f"{self.classroom} - "
+            f"{self.subject} - "
+            f"{self.name}"
+        )
 
 
 # =====================================================
