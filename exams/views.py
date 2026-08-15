@@ -1,4 +1,3 @@
-from django.shortcuts import render
 from rest_framework import generics
 
 from .models import Exam
@@ -6,47 +5,86 @@ from .serializers import ExamSerializer
 from accounts.permisions import IsAdminOrAcademicCoordinator
 
 
-# Create your views here.
 # =====================================================
-# Create Exam
+# CREATE
 # =====================================================
+
 class ExamCreateView(generics.CreateAPIView):
-    queryset = Exam.objects.all()
+    queryset = Exam.objects.select_related(
+        "classroom",
+        "subject",
+    )
+
     serializer_class = ExamSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
 
 
 # =====================================================
-# List Exams
+# LIST
 # =====================================================
+
 class ExamListView(generics.ListAPIView):
-    queryset = Exam.objects.all()
+    queryset = Exam.objects.select_related(
+        "classroom",
+        "subject",
+    )
+
     serializer_class = ExamSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
 
 
 # =====================================================
-# Retrieve Exam
+# DETAIL
 # =====================================================
+
 class ExamDetailView(generics.RetrieveAPIView):
-    queryset = Exam.objects.all()
+    queryset = Exam.objects.select_related(
+        "classroom",
+        "subject",
+    )
+
     serializer_class = ExamSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
 
 
 # =====================================================
-# Update Exam
+# UPDATE
 # =====================================================
+
 class ExamUpdateView(generics.UpdateAPIView):
-    queryset = Exam.objects.all()
+    queryset = Exam.objects.select_related(
+        "classroom",
+        "subject",
+    )
+
     serializer_class = ExamSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
 
 
 # =====================================================
-# Delete Exam
+# DELETE
 # =====================================================
+
 class ExamDeleteView(generics.DestroyAPIView):
-    queryset = Exam.objects.all()
+    queryset = Exam.objects.select_related(
+        "classroom",
+        "subject",
+    )
+
     serializer_class = ExamSerializer
-    permission_classes = [IsAdminOrAcademicCoordinator]
+
+    permission_classes = [
+        IsAdminOrAcademicCoordinator
+    ]
