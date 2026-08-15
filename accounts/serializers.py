@@ -274,3 +274,15 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+# ==========================================
+# Teacher Profile Serializer
+# ==========================================
+
+class TeacherProfileSerializer(serializers.ModelSerializer):
+
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = TeacherProfile
+        fields = "__all__"

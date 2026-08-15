@@ -1,39 +1,183 @@
 from django.urls import include, path
+
 from .views import (
-    ChangePassword, DeleteUser, Login, Logout, ParentList, Register,
-    ResetPassword, RestoreUser, StudentProfileView, UpdateUser, UserDetail, test, UserList,
+    ChangePassword,
+    DeleteUser,
+    Login,
+    Logout,
+    ParentList,
+    Register,
+    ResetPassword,
+    RestoreUser,
+    StudentProfileView,
+    UpdateUser,
+    UserDetail,
+    test,
+    UserList,
+
     AcademicCoordinatorProfileView,
     TeacherProfileView,
     AccountantProfileView,
     ParentProfileView,
+
+    # NEW
+    TeacherProfilesListView,
 )
 
+
 urlpatterns = [
-    # Auth
-    path("login/", Login, name="login"),
-    path("logout/", Logout, name="logout"),
-    path("test/", test, name="test"),
-    path('password/reset/', include('django_rest_passwordreset.urls', namespace='password_reset')),
 
-    # Registration
-    path("register/", Register, name="register"),
+    # =====================================================
+    # AUTH
+    # =====================================================
 
-    # User Management
-    path("parents/", ParentList, name="parent-list"),
-    path("users/", UserList, name="user-list"),
-    path("users/<int:id>/", UserDetail, name="user-detail"),
-    path("users/<int:id>/update/", UpdateUser, name="update-user"),
-    path("users/<int:id>/delete/", DeleteUser, name="delete-user"),
-    path("users/<int:id>/restore/", RestoreUser, name="restore-user"),
+    path(
+        "login/",
+        Login,
+        name="login",
+    ),
 
-    # Password
-    path("change-password/", ChangePassword, name="change-password"),
-    path("reset-password/<int:id>/", ResetPassword, name="reset-password"),
+    path(
+        "logout/",
+        Logout,
+        name="logout",
+    ),
 
-    # ALL PROFILE ENDPOINTS
-    path("coordinator-profile/", AcademicCoordinatorProfileView.as_view(), name="coordinator-profile"),
-    path("teacher-profile/", TeacherProfileView.as_view(), name="teacher-profile"),
-    path("accountant-profile/", AccountantProfileView.as_view(), name="accountant-profile"),
-    path("parent-profile/", ParentProfileView.as_view(), name="parent-profile"),
-    path("student-profile/", StudentProfileView.as_view(), name="student-profile"),
+    path(
+        "test/",
+        test,
+        name="test",
+    ),
+
+    path(
+        "password/reset/",
+        include(
+            "django_rest_passwordreset.urls",
+            namespace="password_reset",
+        ),
+    ),
+
+
+    # =====================================================
+    # REGISTRATION
+    # =====================================================
+
+    path(
+        "register/",
+        Register,
+        name="register",
+    ),
+
+
+    # =====================================================
+    # USER MANAGEMENT
+    # =====================================================
+
+    path(
+        "parents/",
+        ParentList,
+        name="parent-list",
+    ),
+
+    path(
+        "users/",
+        UserList,
+        name="user-list",
+    ),
+
+    path(
+        "users/<int:id>/",
+        UserDetail,
+        name="user-detail",
+    ),
+
+    path(
+        "users/<int:id>/update/",
+        UpdateUser,
+        name="update-user",
+    ),
+
+    path(
+        "users/<int:id>/delete/",
+        DeleteUser,
+        name="delete-user",
+    ),
+
+    path(
+        "users/<int:id>/restore/",
+        RestoreUser,
+        name="restore-user",
+    ),
+
+
+    # =====================================================
+    # PASSWORD
+    # =====================================================
+
+    path(
+        "change-password/",
+        ChangePassword,
+        name="change-password",
+    ),
+
+    path(
+        "reset-password/<int:id>/",
+        ResetPassword,
+        name="reset-password",
+    ),
+
+
+    # =====================================================
+    # CURRENT USER PROFILE ENDPOINTS
+    #
+    # These are for the logged-in user's own profile.
+    # =====================================================
+
+    path(
+        "coordinator-profile/",
+        AcademicCoordinatorProfileView.as_view(),
+        name="coordinator-profile",
+    ),
+
+    path(
+        "teacher-profile/",
+        TeacherProfileView.as_view(),
+        name="teacher-profile",
+    ),
+
+    path(
+        "accountant-profile/",
+        AccountantProfileView.as_view(),
+        name="accountant-profile",
+    ),
+
+    path(
+        "parent-profile/",
+        ParentProfileView.as_view(),
+        name="parent-profile",
+    ),
+
+    path(
+        "student-profile/",
+        StudentProfileView.as_view(),
+        name="student-profile",
+    ),
+
+
+    # =====================================================
+    # ALL TEACHER PROFILES
+    #
+    # Used by Academic Coordinator / Super Admin.
+    #
+    # GET:
+    #     /api/accounts/teacher-profiles/
+    #
+    # This returns ALL registered TeacherProfile records.
+    # =====================================================
+
+    path(
+        "teacher-profiles/",
+        TeacherProfilesListView.as_view(),
+        name="teacher-profiles-list",
+    ),
 ]

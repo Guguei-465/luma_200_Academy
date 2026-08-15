@@ -626,3 +626,66 @@ def ParentList(request):
         serializer.data,
         status=status.HTTP_200_OK
     )
+
+# ============================================================
+# LIST ALL TEACHER PROFILES
+# ============================================================
+#
+# This endpoint is different from TeacherProfileView.
+#
+# TeacherProfileView:
+#     /api/accounts/teacher-profile/
+#
+#     Returns ONLY the logged-in teacher's own profile.
+#
+# TeacherProfilesListView:
+#     /api/accounts/teacher-profiles/
+#
+#     Returns ALL registered teacher profiles.
+#
+# Used by:
+#     - Super Admin
+#     - Academic Coordinator
+#
+# ============================================================
+
+class TeacherProfilesListView(generics.ListAPIView):
+
+    serializer_class = TeacherProfileSerializer
+
+    permission_classes = [
+        permissions.IsAuthenticated
+    ]
+
+    def get_queryset(self):
+
+        # ----------------------------------------------------
+        # Only Super Admin and Academic Coordinator can
+        # access the complete teacher list.
+        # ----------------------------------------------------
+
+        allowed_roles = [
+            CustomUser.Role.SUPER_ADMIN,
+            CustomUser.Role.ACADEMIC_COORDINATOR,
+        ]
+
+        if self.request.user.role not in allowed_roles:
+            return TeacherProfile.objects.none()
+
+        # ----------------------------------------------------
+        # Return ALL teacher profiles.
+        #
+        # select_related("user") makes sure user information
+        # such as first_name, last_name, email, username etc.
+        # can be serialized efficiently.
+        # ----------------------------------------------------
+
+        return (
+            TeacherProfile.objects
+            .select_related("user")
+            .order_by(
+                "user__first_name",
+                "user__last_name",
+                "id",
+            )
+        )
