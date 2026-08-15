@@ -1,12 +1,14 @@
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
-from django.utils import timezone
 from django.db import transaction
-from rest_framework import status
-from rest_framework.decorators import APIView, action
+from django.utils import timezone
+
+from rest_framework import filters, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from accounts import serializers
+from rest_framework.views import APIView
+
 from students.models import Student
+
 from .models import (
     GradeScale,
     AssessmentType,
@@ -33,50 +35,63 @@ from .serializers import (
 )
 
 from .permissions import (
-    IsSuperAdmin,
-    IsAcademicCoordinator,
     IsTeacher,
     IsTeacherOrAcademicCoordinator,
     IsAdminOrAcademicCoordinator,
     IsAssignedTeacher,
     IsAssignedTeacherObject,
 )
-from rest_framework import filters
+
+from .services import (
+    process_result,
+    process_submission,
+)
 
 
 # =====================================================
-# Grade Scale
+# GRADE SCALE
 # =====================================================
+
 class GradeScaleViewSet(viewsets.ModelViewSet):
 
     queryset = GradeScale.objects.all()
+
     serializer_class = GradeScaleSerializer
+
     permission_classes = [
         IsAuthenticated,
         IsAdminOrAcademicCoordinator,
     ]
 
+
 # =====================================================
-# Assessment Types
+# ASSESSMENT TYPE
 # =====================================================
+
 class AssessmentTypeViewSet(viewsets.ModelViewSet):
 
     queryset = AssessmentType.objects.all()
+
     serializer_class = AssessmentTypeSerializer
+
     permission_classes = [
         IsAuthenticated,
         IsAdminOrAcademicCoordinator,
     ]
 
+
 # =====================================================
-# Assessment
+# ASSESSMENT
 # =====================================================
+
 class AssessmentViewSet(viewsets.ModelViewSet):
+
     queryset = Assessment.objects.select_related(
         "subject",
         "classroom",
-        "created_by"
+        "created_by",
     )
+
     serializer_class = AssessmentSerializer
 
     permission_classes = [
@@ -85,17 +100,38 @@ class AssessmentViewSet(viewsets.ModelViewSet):
     ]
 
     def perform_create(self, serializer):
+
         serializer.save(
             created_by=self.request.user
         )
 
+
 # =====================================================
-# Report Comments
+# LEARNING OUTCOME
 # =====================================================
+
+class LearningOutcomeViewSet(viewsets.ModelViewSet):
+
+    queryset = LearningOutcome.objects.select_related(
+        "subject",
+    )
+
+    serializer_class = LearningOutcomeSerializer
+
+    permission_classes = [
+        IsAuthenticated,
+        IsTeacherOrAcademicCoordinator,
+    ]
+
+
+# =====================================================
+# REPORT COMMENTS
+# =====================================================
+
 class ReportCommentViewSet(viewsets.ModelViewSet):
 
     queryset = ReportComment.objects.select_related(
-        "grade"
+        "grade",
     )
 
     serializer_class = ReportCommentSerializer
@@ -105,9 +141,11 @@ class ReportCommentViewSet(viewsets.ModelViewSet):
         IsAdminOrAcademicCoordinator,
     ]
 
+
 # =====================================================
-# Result Submission
+# RESULT SUBMISSION
 # =====================================================
+
 class ResultSubmissionViewSet(viewsets.ModelViewSet):
 
     queryset = ResultSubmission.objects.select_related(
@@ -124,119 +162,203 @@ class ResultSubmissionViewSet(viewsets.ModelViewSet):
     ]
 
     def perform_create(self, serializer):
+
         serializer.save(
             submitted_by=self.request.user
         )
 
-    # ------------------------------------------
-    # Submit Results
-    # ------------------------------------------
+    # =================================================
+    # SUBMIT
+    # =================================================
+
     @action(
         detail=True,
         methods=["post"],
         permission_classes=[
             IsAuthenticated,
             IsTeacher,
-        ]
+        ],
     )
     def submit(self, request, pk=None):
 
         submission = self.get_object()
 
-        if submission.approval_status != ResultSubmission.ApprovalStatus.DRAFT:
+        if (
+            submission.approval_status
+            != ResultSubmission.ApprovalStatus.DRAFT
+        ):
             return Response(
                 {
-                    "detail": "Only draft submissions can be submitted."
+                    "detail": (
+                        "Only draft submissions "
+                        "can be submitted."
+                    )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        submission.approval_status = ResultSubmission.ApprovalStatus.PENDING
+        submission.approval_status = (
+            ResultSubmission.ApprovalStatus.PENDING
+        )
+
         submission.submitted_by = request.user
+
         submission.submitted_at = timezone.now()
 
-        submission.save()
+        submission.save(
+            update_fields=[
+                "approval_status",
+                "submitted_by",
+                "submitted_at",
+                "updated_at",
+            ]
+        )
 
         return Response(
             {
-                "message": "Results submitted successfully."
-            }
+                "message": (
+                    "Results submitted successfully."
+                )
+            },
+            status=status.HTTP_200_OK,
         )
 
-    # ------------------------------------------
-    # Approve Results
-    # ------------------------------------------
+    # =================================================
+    # APPROVE
+    # =================================================
+
     @action(
         detail=True,
         methods=["post"],
         permission_classes=[
             IsAuthenticated,
             IsAdminOrAcademicCoordinator,
-        ]
+        ],
     )
     def approve(self, request, pk=None):
 
         submission = self.get_object()
 
-        if submission.approval_status != ResultSubmission.ApprovalStatus.PENDING:
+        if (
+            submission.approval_status
+            != ResultSubmission.ApprovalStatus.PENDING
+        ):
             return Response(
                 {
-                    "detail": "Only pending submissions can be approved."
+                    "detail": (
+                        "Only pending submissions "
+                        "can be approved."
+                    )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        submission.approval_status = ResultSubmission.ApprovalStatus.APPROVED
-        submission.approved_by = request.user
-        submission.approved_at = timezone.now()
+        with transaction.atomic():
 
-        submission.save()
+            submission.approval_status = (
+                ResultSubmission.ApprovalStatus.APPROVED
+            )
+
+            submission.approved_by = request.user
+
+            submission.approved_at = timezone.now()
+
+            submission.save(
+                update_fields=[
+                    "approval_status",
+                    "approved_by",
+                    "approved_at",
+                    "updated_at",
+                ]
+            )
+
+            # -----------------------------------------
+            # Process the complete submission
+            # -----------------------------------------
+
+            process_submission(submission)
 
         return Response(
             {
-                "message": "Results approved successfully."
-            }
+                "message": (
+                    "Results approved and processed "
+                    "successfully."
+                )
+            },
+            status=status.HTTP_200_OK,
         )
 
-    # ------------------------------------------
-    # Return Results
-    # ------------------------------------------
+    # =================================================
+    # RETURN RESULTS
+    # =================================================
+
     @action(
         detail=True,
         methods=["post"],
         permission_classes=[
             IsAuthenticated,
             IsAdminOrAcademicCoordinator,
-        ]
+        ],
     )
     def return_results(self, request, pk=None):
 
         submission = self.get_object()
 
+        if (
+            submission.approval_status
+            != ResultSubmission.ApprovalStatus.PENDING
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Only pending submissions "
+                        "can be returned."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         comments = request.data.get(
             "coordinator_comments",
-            ""
+            "",
         )
 
-        submission.approval_status = ResultSubmission.ApprovalStatus.RETURNED
+        submission.approval_status = (
+            ResultSubmission.ApprovalStatus.RETURNED
+        )
+
         submission.coordinator_comments = comments
 
-        submission.save()
+        submission.save(
+            update_fields=[
+                "approval_status",
+                "coordinator_comments",
+                "updated_at",
+            ]
+        )
 
         return Response(
             {
-                "message": "Results returned successfully."
-            }
+                "message": (
+                    "Results returned successfully."
+                )
+            },
+            status=status.HTTP_200_OK,
         )
-    
+
+
 # =====================================================
-# Result
+# RESULT
 # =====================================================
+
 class ResultViewSet(viewsets.ModelViewSet):
 
     queryset = Result.objects.select_related(
         "student",
         "submission",
+        "submission__assessment",
+        "submission__assessment__subject",
+        "submission__assessment__classroom",
         "grade",
     )
 
@@ -247,10 +369,29 @@ class ResultViewSet(viewsets.ModelViewSet):
         IsAssignedTeacher,
     ]
 
+    # =================================================
+    # CREATE
+    # =================================================
+
     def perform_create(self, serializer):
-        serializer.save(
-            entered_by=self.request.user
+
+        result = serializer.save(
+            entered_by=self.request.user,
+            last_modified_by=self.request.user,
         )
+
+        # ---------------------------------------------
+        # Process immediately
+        #
+        # This is safe because approved submissions
+        # are protected by the serializer/permissions.
+        # ---------------------------------------------
+
+        process_result(result)
+
+    # =================================================
+    # PERMISSIONS
+    # =================================================
 
     def get_permissions(self):
 
@@ -259,6 +400,7 @@ class ResultViewSet(viewsets.ModelViewSet):
             "partial_update",
             "destroy",
         ]:
+
             return [
                 IsAuthenticated(),
                 IsAssignedTeacherObject(),
@@ -266,7 +408,16 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         return super().get_permissions()
 
-    def update(self, request, *args, **kwargs):
+    # =================================================
+    # UPDATE
+    # =================================================
+
+    def update(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
 
         instance = self.get_object()
 
@@ -276,14 +427,43 @@ class ResultViewSet(viewsets.ModelViewSet):
         ):
             return Response(
                 {
-                    "detail": "Approved results cannot be edited."
+                    "detail": (
+                        "Approved results "
+                        "cannot be edited."
+                    )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        return super().update(request, *args, **kwargs)
+        serializer = self.get_serializer(
+            instance,
+            data=request.data,
+        )
 
-    def destroy(self, request, *args, **kwargs):
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        result = serializer.save(
+            last_modified_by=request.user,
+        )
+
+        process_result(result)
+
+        return Response(
+            self.get_serializer(result).data
+        )
+
+    # =================================================
+    # PARTIAL UPDATE
+    # =================================================
+
+    def partial_update(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
 
         instance = self.get_object()
 
@@ -293,16 +473,71 @@ class ResultViewSet(viewsets.ModelViewSet):
         ):
             return Response(
                 {
-                    "detail": "Approved results cannot be deleted."
+                    "detail": (
+                        "Approved results "
+                        "cannot be edited."
+                    )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        return super().destroy(request, *args, **kwargs)
+        serializer = self.get_serializer(
+            instance,
+            data=request.data,
+            partial=True,
+        )
 
-    # =====================================================
-    # Bulk Result Entry
-    # =====================================================
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        result = serializer.save(
+            last_modified_by=request.user,
+        )
+
+        process_result(result)
+
+        return Response(
+            self.get_serializer(result).data
+        )
+
+    # =================================================
+    # DELETE
+    # =================================================
+
+    def destroy(
+        self,
+        request,
+        *args,
+        **kwargs,
+    ):
+
+        instance = self.get_object()
+
+        if (
+            instance.submission.approval_status
+            == ResultSubmission.ApprovalStatus.APPROVED
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Approved results "
+                        "cannot be deleted."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return super().destroy(
+            request,
+            *args,
+            **kwargs,
+        )
+
+    # =================================================
+    # BULK RESULT ENTRY
+    # =================================================
+
     @action(
         detail=False,
         methods=["post"],
@@ -310,7 +545,7 @@ class ResultViewSet(viewsets.ModelViewSet):
         permission_classes=[
             IsAuthenticated,
             IsAssignedTeacher,
-        ]
+        ],
     )
     def bulk(self, request):
 
@@ -325,16 +560,34 @@ class ResultViewSet(viewsets.ModelViewSet):
         data = serializer.validated_data
 
         try:
-            submission = ResultSubmission.objects.get(
-                pk=data["submission"]
+
+            submission = (
+                ResultSubmission.objects
+                .select_related(
+                    "assessment",
+                    "assessment__subject",
+                    "assessment__classroom",
+                )
+                .get(
+                    pk=data["submission"]
+                )
             )
+
         except ResultSubmission.DoesNotExist:
+
             return Response(
                 {
-                    "detail": "Result submission not found."
+                    "detail": (
+                        "Result submission "
+                        "not found."
+                    )
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        # ---------------------------------------------
+        # Approved submissions are locked
+        # ---------------------------------------------
 
         if (
             submission.approval_status
@@ -342,7 +595,10 @@ class ResultViewSet(viewsets.ModelViewSet):
         ):
             return Response(
                 {
-                    "detail": "Approved submissions cannot be modified."
+                    "detail": (
+                        "Approved submissions "
+                        "cannot be modified."
+                    )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -354,18 +610,35 @@ class ResultViewSet(viewsets.ModelViewSet):
 
             for item in data["results"]:
 
-                _, was_created = Result.objects.update_or_create(
+                result, was_created = (
+                    Result.objects.update_or_create(
 
-                    submission=submission,
-                    student_id=item["student"],
+                        submission=submission,
 
-                    defaults={
-                        "status": item["status"],
-                        "marks": item.get("marks"),
-                        "remarks": item.get("remarks", ""),
-                        "entered_by": request.user,
-                    }
+                        student_id=item["student"],
+
+                        defaults={
+                            "status": item["status"],
+                            "marks": item.get("marks"),
+                            "remarks": item.get(
+                                "remarks",
+                                "",
+                            ),
+                            "entered_by": (
+                                request.user
+                            ),
+                            "last_modified_by": (
+                                request.user
+                            ),
+                        },
+                    )
                 )
+
+                # -------------------------------------
+                # Process this result
+                # -------------------------------------
+
+                process_result(result)
 
                 if was_created:
                     created += 1
@@ -374,7 +647,10 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         return Response(
             {
-                "message": "Bulk results saved successfully.",
+                "message": (
+                    "Bulk results saved "
+                    "successfully."
+                ),
                 "created": created,
                 "updated": updated,
                 "total": created + updated,
@@ -384,9 +660,12 @@ class ResultViewSet(viewsets.ModelViewSet):
 
 
 # =====================================================
-# Student Result
+# STUDENT RESULT
 # =====================================================
-class StudentResultViewSet(viewsets.ReadOnlyModelViewSet):
+
+class StudentResultViewSet(
+    viewsets.ReadOnlyModelViewSet
+):
 
     queryset = StudentResult.objects.select_related(
         "student",
@@ -416,16 +695,21 @@ class StudentResultViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = [
         "average_score",
         "total_score",
+        "subject_position",
     ]
 
     ordering = [
         "student__first_name",
     ]
 
+
 # =====================================================
-# Student Term Result
+# STUDENT TERM RESULT
 # =====================================================
-class StudentTermResultViewSet(viewsets.ReadOnlyModelViewSet):
+
+class StudentTermResultViewSet(
+    viewsets.ReadOnlyModelViewSet
+):
 
     queryset = StudentTermResult.objects.select_related(
         "student",
@@ -459,23 +743,37 @@ class StudentTermResultViewSet(viewsets.ReadOnlyModelViewSet):
         "position",
     ]
 
+    # =================================================
+    # REPORT CARD
+    # =================================================
+
     @action(
         detail=True,
         methods=["get"],
-        permission_classes=[IsAuthenticated],
+        permission_classes=[
+            IsAuthenticated,
+        ],
     )
-    def report_card(self, request, pk=None):
+    def report_card(
+        self,
+        request,
+        pk=None,
+    ):
 
         term_result = self.get_object()
 
-        subject_results = StudentResult.objects.filter(
-            student=term_result.student,
-            classroom=term_result.classroom,
-            term=term_result.term,
-            academic_year=term_result.academic_year,
-        ).select_related(
-            "subject",
-            "grade",
+        subject_results = (
+            StudentResult.objects
+            .filter(
+                student=term_result.student,
+                classroom=term_result.classroom,
+                term=term_result.term,
+                academic_year=term_result.academic_year,
+            )
+            .select_related(
+                "subject",
+                "grade",
+            )
         )
 
         serializer = StudentResultSerializer(
@@ -485,95 +783,317 @@ class StudentTermResultViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response(
             {
-                "student": str(term_result.student),
-                "classroom": str(term_result.classroom),
+                "student": str(
+                    term_result.student
+                ),
+
+                "classroom": str(
+                    term_result.classroom
+                ),
+
                 "term": term_result.term,
-                "academic_year": term_result.academic_year,
+
+                "academic_year": (
+                    term_result.academic_year
+                ),
+
                 "overall_grade": (
                     term_result.overall_grade.level
                     if term_result.overall_grade
                     else None
                 ),
-                "average_marks": term_result.average_marks,
-                "position": term_result.position,
+
+                "cbc_code": (
+                    term_result.cbc_code
+                ),
+
+                "cbc_description": (
+                    term_result.cbc_description
+                ),
+
+                "total_marks": (
+                    term_result.total_marks
+                ),
+
+                "average_marks": (
+                    term_result.average_marks
+                ),
+
+                "position": (
+                    term_result.position
+                ),
+
+                "total_subjects": (
+                    term_result.total_subjects
+                ),
+
+                "attendance_percentage": (
+                    term_result.attendance_percentage
+                ),
+
+                "class_teacher_comment": (
+                    term_result.class_teacher_comment
+                ),
+
+                "headteacher_comment": (
+                    term_result.headteacher_comment
+                ),
+
                 "subjects": serializer.data,
             }
         )
 
 
-class LearningOutcomeViewSet(viewsets.ModelViewSet):
-    queryset = LearningOutcome.objects.all()
-    serializer_class = LearningOutcomeSerializer
+# =====================================================
+# STUDENT REPORT CARD API
+# =====================================================
 
 class StudentReportCardAPIView(APIView):
 
-    def get(self, request, student_id, academic_year, term):
+    permission_classes = [
+        IsAuthenticated,
+    ]
+
+    def get(
+        self,
+        request,
+        student_id,
+        academic_year,
+        term,
+    ):
 
         try:
-            student = Student.objects.get(pk=student_id)
-        except Student.DoesNotExist:
-            return Response(
-                {
-                    "detail": "Student not found."
-                },
-                status=status.HTTP_404_NOT_FOUND
+
+            student = Student.objects.select_related(
+                "classroom"
+            ).get(
+                pk=student_id
             )
 
-        subjects = StudentResult.objects.filter(
-            student=student,
-            academic_year=academic_year,
-            term=term,
-        ).select_related(
-            "subject",
-            "grade",
-        )
+        except Student.DoesNotExist:
 
-        try:
-            summary = StudentTermResult.objects.select_related(
-                "overall_grade"
-            ).get(
+            return Response(
+                {
+                    "detail": (
+                        "Student not found."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # ---------------------------------------------
+        # Subject results
+        # ---------------------------------------------
+
+        subjects = (
+            StudentResult.objects
+            .filter(
                 student=student,
                 academic_year=academic_year,
                 term=term,
             )
+            .select_related(
+                "subject",
+                "grade",
+                "classroom",
+            )
+            .order_by(
+                "subject__name"
+            )
+        )
+
+        # ---------------------------------------------
+        # Overall term result
+        # ---------------------------------------------
+
+        try:
+
+            summary = (
+                StudentTermResult.objects
+                .select_related(
+                    "overall_grade",
+                    "classroom",
+                )
+                .get(
+                    student=student,
+                    academic_year=academic_year,
+                    term=term,
+                )
+            )
+
         except StudentTermResult.DoesNotExist:
+
             summary = None
 
-        data = {
-            "student": {
-                "id": student.id,
-                "name": str(student),
-                "admission_number": student.admission_number,
-                "assessment_number": student.assessment_number,
-                "classroom": str(student.classroom),
-            },
+        # ---------------------------------------------
+        # Student information
+        # ---------------------------------------------
 
-            "subjects": [
+        student_data = {
+            "id": student.id,
 
-                {
-                    "subject": item.subject.name,
-                    "total_score": item.total_score,
-                    "average_score": item.average_score,
-                    "grade": item.grade.level if item.grade else None,
-                    "cbc_code": item.cbc_code,
-                    "cbc_description": item.cbc_description,
-                    "teacher_comment": item.teacher_comment,
-                }
+            "name": str(student),
 
-                for item in subjects
-            ],
+            "admission_number": (
+                getattr(
+                    student,
+                    "admission_number",
+                    getattr(
+                        student,
+                        "admission_no",
+                        None,
+                    ),
+                )
+            ),
 
-            "summary": None if summary is None else {
+            "assessment_number": (
+                getattr(
+                    student,
+                    "assessment_number",
+                    None,
+                )
+            ),
 
-                "total_marks": summary.total_marks,
-                "average_marks": summary.average_marks,
-                "overall_grade": summary.overall_grade.level if summary.overall_grade else None,
-                "position": summary.position,
-                "total_subjects": summary.total_subjects,
-                "attendance_percentage": summary.attendance_percentage,
-                "class_teacher_comment": summary.class_teacher_comment,
-                "headteacher_comment": summary.headteacher_comment,
-            }
+            "classroom": (
+                str(student.classroom)
+                if getattr(
+                    student,
+                    "classroom",
+                    None,
+                )
+                else None
+            ),
         }
 
-        return Response(data)
+        # ---------------------------------------------
+        # Subject information
+        # ---------------------------------------------
+
+        subject_data = []
+
+        for item in subjects:
+
+            subject_data.append(
+                {
+                    "id": item.id,
+
+                    "subject": (
+                        item.subject.name
+                    ),
+
+                    "total_score": (
+                        item.total_score
+                    ),
+
+                    "average_score": (
+                        item.average_score
+                    ),
+
+                    "grade": (
+                        item.grade.level
+                        if item.grade
+                        else None
+                    ),
+
+                    "cbc_code": (
+                        item.cbc_code
+                    ),
+
+                    "cbc_description": (
+                        item.cbc_description
+                    ),
+
+                    "subject_position": (
+                        item.subject_position
+                    ),
+
+                    "highest_score": (
+                        item.highest_score
+                    ),
+
+                    "lowest_score": (
+                        item.lowest_score
+                    ),
+
+                    "class_average": (
+                        item.class_average
+                    ),
+
+                    "learners_assessed": (
+                        item.learners_assessed
+                    ),
+
+                    "teacher_comment": (
+                        item.teacher_comment
+                    ),
+                }
+            )
+
+        # ---------------------------------------------
+        # Summary
+        # ---------------------------------------------
+
+        summary_data = None
+
+        if summary:
+
+            summary_data = {
+                "total_marks": (
+                    summary.total_marks
+                ),
+
+                "average_marks": (
+                    summary.average_marks
+                ),
+
+                "overall_grade": (
+                    summary.overall_grade.level
+                    if summary.overall_grade
+                    else None
+                ),
+
+                "cbc_code": (
+                    summary.cbc_code
+                ),
+
+                "cbc_description": (
+                    summary.cbc_description
+                ),
+
+                "position": (
+                    summary.position
+                ),
+
+                "total_subjects": (
+                    summary.total_subjects
+                ),
+
+                "attendance_percentage": (
+                    summary.attendance_percentage
+                ),
+
+                "class_teacher_comment": (
+                    summary.class_teacher_comment
+                ),
+
+                "headteacher_comment": (
+                    summary.headteacher_comment
+                ),
+            }
+
+        return Response(
+            {
+                "student": student_data,
+
+                "academic_year": (
+                    academic_year
+                ),
+
+                "term": term,
+
+                "subjects": subject_data,
+
+                "summary": summary_data,
+            },
+            status=status.HTTP_200_OK,
+        )

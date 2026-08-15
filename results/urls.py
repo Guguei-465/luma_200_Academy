@@ -8,13 +8,23 @@ from .views import (
     LearningOutcomeViewSet,
     ResultSubmissionViewSet,
     ResultViewSet,
-    StudentReportCardAPIView,
     StudentResultViewSet,
     StudentTermResultViewSet,
     ReportCommentViewSet,
+    StudentReportCardAPIView,
 )
 
+
+# =====================================================
+# API ROUTER
+# =====================================================
+
 router = DefaultRouter()
+
+
+# -----------------------------------------------------
+# Grade Scales
+# -----------------------------------------------------
 
 router.register(
     r"grade-scales",
@@ -22,11 +32,21 @@ router.register(
     basename="grade-scale",
 )
 
+
+# -----------------------------------------------------
+# Assessment Types
+# -----------------------------------------------------
+
 router.register(
     r"assessment-types",
     AssessmentTypeViewSet,
     basename="assessment-type",
 )
+
+
+# -----------------------------------------------------
+# Assessments
+# -----------------------------------------------------
 
 router.register(
     r"assessments",
@@ -34,11 +54,21 @@ router.register(
     basename="assessment",
 )
 
+
+# -----------------------------------------------------
+# Learning Outcomes
+# -----------------------------------------------------
+
 router.register(
     r"learning-outcomes",
     LearningOutcomeViewSet,
     basename="learning-outcome",
 )
+
+
+# -----------------------------------------------------
+# Result Submissions
+# -----------------------------------------------------
 
 router.register(
     r"result-submissions",
@@ -46,11 +76,21 @@ router.register(
     basename="result-submission",
 )
 
+
+# -----------------------------------------------------
+# Individual Results
+# -----------------------------------------------------
+
 router.register(
     r"results",
     ResultViewSet,
     basename="result",
 )
+
+
+# -----------------------------------------------------
+# Final Student Subject Results
+# -----------------------------------------------------
 
 router.register(
     r"student-results",
@@ -58,11 +98,21 @@ router.register(
     basename="student-result",
 )
 
+
+# -----------------------------------------------------
+# Final Student Term Results
+# -----------------------------------------------------
+
 router.register(
     r"student-term-results",
     StudentTermResultViewSet,
     basename="student-term-result",
 )
+
+
+# -----------------------------------------------------
+# Report Comments
+# -----------------------------------------------------
 
 router.register(
     r"report-comments",
@@ -71,8 +121,31 @@ router.register(
 )
 
 
+# =====================================================
+# URL PATTERNS
+# =====================================================
+
 urlpatterns = [
-    path("", include(router.urls)),
+
+    # -----------------------------------------------
+    # All ViewSet APIs
+    # -----------------------------------------------
+
+    path(
+        "",
+        include(router.urls)
+    ),
+
+
+    # -----------------------------------------------
+    # Student Report Card
+    #
+    # Example:
+    #
+    # /api/results/report-card/12/2026/Term%201/
+    #
+    # -----------------------------------------------
+
     path(
         "report-card/<int:student_id>/<str:academic_year>/<str:term>/",
         StudentReportCardAPIView.as_view(),

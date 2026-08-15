@@ -1,208 +1,261 @@
 from rest_framework.permissions import BasePermission
 
-from assignments.models import TeacherAssignment
 
-from .models import Assessment
+# =====================================================
+# Helper
+# =====================================================
+
+def is_super_admin(user):
+    return (
+        user
+        and user.is_authenticated
+        and getattr(user, "role", None) == "SUPER_ADMIN"
+    )
+
+
+def is_academic_coordinator(user):
+    return (
+        user
+        and user.is_authenticated
+        and getattr(user, "role", None) == "ACADEMIC_COORDINATOR"
+    )
+
+
+def is_teacher(user):
+    return (
+        user
+        and user.is_authenticated
+        and getattr(user, "role", None) == "TEACHER"
+    )
 
 
 # =====================================================
 # Super Admin
 # =====================================================
+
 class IsSuperAdmin(BasePermission):
     """
-    Allows access only to Super Admins.
+    Allows access only to Super Administrators.
     """
 
     def has_permission(self, request, view):
-        return (
-            request.user.is_authenticated and
-            request.user.role == "SUPER_ADMIN"
-        )
+        return is_super_admin(request.user)
 
 
 # =====================================================
 # Academic Coordinator
 # =====================================================
+
 class IsAcademicCoordinator(BasePermission):
     """
     Allows access only to Academic Coordinators.
     """
 
     def has_permission(self, request, view):
-        return (
-            request.user.is_authenticated and
-            request.user.role == "ACADEMIC_COORDINATOR"
-        )
+        return is_academic_coordinator(request.user)
 
 
 # =====================================================
 # Teacher
 # =====================================================
+
 class IsTeacher(BasePermission):
     """
     Allows access only to Teachers.
     """
 
     def has_permission(self, request, view):
-        return (
-            request.user.is_authenticated and
-            request.user.role == "TEACHER"
-        )
+        return is_teacher(request.user)
 
 
 # =====================================================
-# Parent
+# Super Admin OR Academic Coordinator
 # =====================================================
-class IsParent(BasePermission):
-    """
-    Allows access only to Parents.
-    """
 
-    def has_permission(self, request, view):
-        return (
-            request.user.is_authenticated and
-            request.user.role == "PARENT"
-        )
-
-
-# =====================================================
-# Teacher or Academic Coordinator
-# =====================================================
-class IsTeacherOrAcademicCoordinator(BasePermission):
-    """
-    Allows Teachers and Academic Coordinators.
-    """
-
-    def has_permission(self, request, view):
-        return (
-            request.user.is_authenticated and
-            request.user.role in (
-                "TEACHER",
-                "ACADEMIC_COORDINATOR",
-            )
-        )
-
-
-# =====================================================
-# Super Admin or Academic Coordinator
-# =====================================================
 class IsAdminOrAcademicCoordinator(BasePermission):
     """
-    Allows Super Admins and Academic Coordinators.
+    Allows Super Admin or Academic Coordinator.
     """
 
     def has_permission(self, request, view):
         return (
-            request.user.is_authenticated and
-            request.user.role in (
-                "SUPER_ADMIN",
-                "ACADEMIC_COORDINATOR",
-            )
+            is_super_admin(request.user)
+            or is_academic_coordinator(request.user)
         )
 
 
 # =====================================================
-# Parent Read Only
+# Teacher OR Academic Coordinator
 # =====================================================
-class IsParentReadOnly(BasePermission):
+
+class IsTeacherOrAcademicCoordinator(BasePermission):
     """
-    Parents can only view results.
+    Allows Teachers or Academic Coordinators.
     """
 
     def has_permission(self, request, view):
         return (
-            request.user.is_authenticated and
-            request.user.role == "PARENT" and
-            request.method in (
-                "GET",
-                "HEAD",
-                "OPTIONS",
-            )
+            is_teacher(request.user)
+            or is_academic_coordinator(request.user)
         )
 
 
 # =====================================================
 # Assigned Teacher
 # =====================================================
+
 class IsAssignedTeacher(BasePermission):
     """
-    Allows only the assigned teacher to enter marks
-    for a particular assessment.
-    """
+    Allows authenticated teachers who are assigned to
+    the classroom and subject involved in the request.
 
-    message = (
-        "You are not assigned to teach this class and subject."
-    )
+    This permission is mainly used for creating and
+    bulk-entering results.
+    """
 
     def has_permission(self, request, view):
 
-        if not request.user.is_authenticated:
+        if not is_teacher(request.user):
             return False
 
-        if request.user.role == "SUPER_ADMIN":
-            return True
+        return True
 
-        if request.user.role == "ACADEMIC_COORDINATOR":
-            return True
+    def has_object_permission(self, request, view, obj):
 
-        if request.user.role != "TEACHER":
+        if not is_teacher(request.user):
             return False
 
-        assessment_id = (
-            request.data.get("assessment")
-            or request.query_params.get("assessment")
+        return _teacher_is_assigned_to_result(
+            request.user,
+            obj
         )
 
-        if not assessment_id:
+
+# =====================================================
+# Assigned Teacher Object Permission
+# =====================================================
+
+class IsAssignedTeacherObject(BasePermission):
+    """
+    Object-level permission used when a teacher edits
+    or deletes an existing Result.
+
+    The teacher must be assigned to the subject/classroom
+    represented by that result.
+    """
+
+    def has_permission(self, request, view):
+        return is_teacher(request.user)
+
+    def has_object_permission(self, request, view, obj):
+
+        if not is_teacher(request.user):
             return False
 
-        try:
-            assessment = Assessment.objects.get(pk=assessment_id)
-        except Assessment.DoesNotExist:
-            return False
+        return _teacher_is_assigned_to_result(
+            request.user,
+            obj
+        )
 
-        if not hasattr(request.user, "teacher_profile"):
+
+# =====================================================
+# Assignment Checker
+# =====================================================
+
+def _teacher_is_assigned_to_result(user, result):
+    """
+    Checks whether the teacher is assigned to the
+    classroom + subject for the result.
+
+    The Luma system allows one teacher to teach
+    multiple subjects and multiple classes.
+
+    TeacherAssignment is therefore checked using BOTH:
+        - teacher
+        - classroom
+        - subject
+    """
+
+    try:
+        from assignments.models import TeacherAssignment
+    except ImportError:
+        return False
+
+    try:
+        assessment = result.submission.assessment
+
+        if assessment is None:
             return False
 
         return TeacherAssignment.objects.filter(
-            teacher=request.user.teacher_profile,
+            teacher__user=user,
             classroom=assessment.classroom,
             subject=assessment.subject,
-            is_active=True,
+        ).exists()
+
+    except AttributeError:
+        return False
+
+
+# =====================================================
+# Assessment Assignment Permission
+# =====================================================
+
+class IsAssignedTeacherAssessment(BasePermission):
+    """
+    Checks whether a teacher is assigned to the
+    classroom and subject of an Assessment.
+    """
+
+    def has_permission(self, request, view):
+        return is_teacher(request.user)
+
+    def has_object_permission(self, request, view, assessment):
+
+        if not is_teacher(request.user):
+            return False
+
+        try:
+            from assignments.models import TeacherAssignment
+        except ImportError:
+            return False
+
+        return TeacherAssignment.objects.filter(
+            teacher__user=request.user,
+            classroom=assessment.classroom,
+            subject=assessment.subject,
         ).exists()
 
 
 # =====================================================
-# Assigned Teacher (Object Level)
+# Result Submission Permission
 # =====================================================
-class IsAssignedTeacherObject(BasePermission):
+
+class IsAssignedTeacherSubmission(BasePermission):
     """
-    Object-level permission for updating or deleting results.
+    Allows a teacher to work with a ResultSubmission
+    only when the teacher is assigned to the assessment's
+    classroom and subject.
     """
 
-    message = (
-        "You are not assigned to this assessment."
-    )
+    def has_permission(self, request, view):
+        return is_teacher(request.user)
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request, view, submission):
 
-        if request.user.role == "SUPER_ADMIN":
-            return True
-
-        if request.user.role == "ACADEMIC_COORDINATOR":
-            return True
-
-        if request.user.role != "TEACHER":
+        if not is_teacher(request.user):
             return False
 
-        if not hasattr(request.user, "teacher_profile"):
+        try:
+            from assignments.models import TeacherAssignment
+        except ImportError:
             return False
 
-        assessment = obj.submission.assessment
+        if not submission.assessment:
+            return False
 
         return TeacherAssignment.objects.filter(
-            teacher=request.user.teacher_profile,
-            classroom=assessment.classroom,
-            subject=assessment.subject,
-            is_active=True,
+            teacher__user=request.user,
+            classroom=submission.assessment.classroom,
+            subject=submission.assessment.subject,
         ).exists()
