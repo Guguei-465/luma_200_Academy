@@ -327,30 +327,47 @@ class AttendanceSubmissionCreateView(APIView):
 
 
 # =====================================================
-# ✅ TEACHER ATTENDANCE HISTORY — NEW
+# ✅ TEACHER ATTENDANCE HISTORY — NO APPROVAL CHECK
 # =====================================================
 class TeacherAttendanceHistoryView(APIView):
     permission_classes = [IsAssignedClassTeacher]
 
     def get(self, request):
+        # ✅ Safe teacher profile check — no crash
         if not hasattr(request.user, "teacher_profile"):
-            return Response({"error": "Only teachers can view history."}, status=403)
+            return Response(
+                {"error": "Only teachers can view attendance history."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
+        # ✅ NO approval filter — return ALL attendance marked by this teacher
         records = Attendance.objects.filter(
-            submission__submitted_by=request.user,
-            submission__approval_status=AttendanceSubmission.ApprovalStatus.APPROVED,
-        ).select_related("student", "submission", "submission__classroom").order_by("-submission__date")
+            submission__submitted_by=request.user
+        ).select_related(
+            "student",
+            "submission",
+            "submission__classroom",
+        ).order_by("-submission__date")
 
+        # ✅ Safe formatting — no crash on missing fields
         data = []
         for rec in records:
-            student_name = f"{rec.student.first_name or ''} {rec.student.last_name or ''}".strip() or f"Student #{rec.student_id}"
+            student_name = ""
+            if hasattr(rec.student, "first_name") and hasattr(rec.student, "last_name"):
+                student_name = f"{rec.student.first_name or ''} {rec.student.last_name or ''}".strip()
+            if not student_name:
+                student_name = f"Student #{rec.student_id}"
+
+            classroom_name = str(rec.submission.classroom) if rec.submission.classroom else "Unknown Class"
+
             data.append({
                 "id": rec.id,
                 "date": rec.submission.date,
-                "classroom_name": str(rec.submission.classroom),
+                "classroom_name": classroom_name,
                 "student_name": student_name,
                 "admission_number": getattr(rec.student, "admission_number", "N/A"),
                 "status": rec.status,
                 "remarks": rec.remarks or "",
             })
-        return Response(data)
+
+        return Response(data, status=status.HTTP_200_OK)
