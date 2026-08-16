@@ -6,44 +6,122 @@ from accounts.models import CustomUser
 
 class IsAssignedClassTeacher(BasePermission):
     """
-    Allows access only to:
+    Attendance permission.
+
+    Allows:
+
     - Super Admin
     - Academic Coordinator
-    - Assigned active class teacher
+    - Teacher who is an active class teacher
+
+    TeacherAssignment logic is NOT changed.
     """
 
     def has_permission(self, request, view):
 
-        # User must be authenticated
+        # ====================================================
+        # AUTHENTICATION
+        # ====================================================
+
         if not request.user.is_authenticated:
             return False
 
-        # Super Admin
+        # ====================================================
+        # SUPER ADMIN
+        # ====================================================
+
         if request.user.role == CustomUser.Role.SUPER_ADMIN:
             return True
 
-        # Academic Coordinator
-        if request.user.role == CustomUser.Role.ACADEMIC_COORDINATOR:
+        # ====================================================
+        # ACADEMIC COORDINATOR
+        # ====================================================
+
+        if (
+            request.user.role
+            == CustomUser.Role.ACADEMIC_COORDINATOR
+        ):
             return True
 
-        # Only teachers beyond this point
+        # ====================================================
+        # TEACHER ONLY
+        # ====================================================
+
         if request.user.role != CustomUser.Role.TEACHER:
             return False
 
-        # Teacher profile must exist
-        if not hasattr(request.user, "teacher_profile"):
+        # ====================================================
+        # TEACHER PROFILE
+        # ====================================================
+
+        try:
+            teacher_profile = request.user.teacher_profile
+        except Exception:
             return False
 
-        classroom_id = request.data.get("classroom")
+        # ====================================================
+        # CREATE ENDPOINT
+        #
+        # /attendance/create/
+        #
+        # receives:
+        #
+        # {
+        #     "assignment": 3
+        # }
+        #
+        # Object verification happens in the view.
+        # ====================================================
 
-        # Some endpoints (mark/submit) don't send classroom directly.
-        # They perform object-level verification inside the view.
-        if classroom_id is None:
+        if view.__class__.__name__ == (
+            "AttendanceSubmissionCreateView"
+        ):
+
             return True
 
-        return TeacherAssignment.objects.filter(
-            teacher=request.user.teacher_profile,
-            classroom_id=classroom_id,
-            is_active=True,
-            is_class_teacher=True,
-        ).exists()
+        # ====================================================
+        # MARK ENDPOINT
+        #
+        # Verification happens in the view using
+        # submission -> assignment -> teacher.
+        # ====================================================
+
+        if view.__class__.__name__ == (
+            "MarkAttendanceView"
+        ):
+
+            return True
+
+        # ====================================================
+        # SUBMIT ENDPOINT
+        #
+        # Kept for backwards compatibility.
+        # The application no longer needs a separate
+        # submit step.
+        # ====================================================
+
+        if view.__class__.__name__ == (
+            "SubmitAttendanceView"
+        ):
+
+            return True
+
+        # ====================================================
+        # HISTORY
+        # ====================================================
+
+        if view.__class__.__name__ == (
+            "TeacherAttendanceHistoryView"
+        ):
+
+            return TeacherAssignment.objects.filter(
+                teacher=teacher_profile,
+                is_active=True,
+                is_class_teacher=True,
+            ).exists()
+
+        # ====================================================
+        # DEFAULT
+        # ====================================================
+
+        return True

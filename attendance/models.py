@@ -1,55 +1,103 @@
 from django.db import models
 from django.utils import timezone
+
 from assignments.models import TeacherAssignment
 from accounts.models import CustomUser
 from classes.models import ClassRoom
 from students.models import Student
 
 
+# ============================================================
+# ATTENDANCE SUBMISSION
+# ============================================================
+
 class AttendanceSubmission(models.Model):
 
     class Status(models.TextChoices):
         DRAFT = "Draft", "Draft"
-        FINAL = "Final", "Final"  # ✅ No approval — marked = final
+        FINAL = "Final", "Final"
 
     assignment = models.ForeignKey(
         TeacherAssignment,
         on_delete=models.CASCADE,
         related_name="attendance_submissions",
     )
+
     classroom = models.ForeignKey(
         ClassRoom,
         on_delete=models.CASCADE,
         related_name="attendance_submissions",
     )
-    date = models.DateField(default=timezone.localdate, db_index=True)
+
+    date = models.DateField(
+        default=timezone.localdate,
+        db_index=True,
+    )
+
     submitted_by = models.ForeignKey(
-        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="submitted_attendance",
     )
-    submitted_at = models.DateTimeField(null=True, blank=True)
 
-    status = models.CharField(  # ✅ Renamed approval_status → status
-        max_length=10, choices=Status.choices, default=Status.DRAFT,
+    submitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
     )
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    # ========================================================
+    # NO APPROVAL SYSTEM
+    #
+    # Draft = attendance session has been opened
+    # Final = teacher has saved attendance
+    # ========================================================
+
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
 
     class Meta:
         ordering = ["-date", "classroom"]
-        unique_together = ("assignment", "date")
+
+        unique_together = (
+            "assignment",
+            "date",
+        )
+
         verbose_name = "Attendance Submission"
         verbose_name_plural = "Attendance Submissions"
 
     def __str__(self):
+
         teacher_name = (
             self.assignment.teacher.user.get_full_name()
-            if self.assignment.teacher and self.assignment.teacher.user
+            if self.assignment.teacher
+            and self.assignment.teacher.user
             else "Unknown Teacher"
         )
-        return f"{teacher_name} - {self.classroom} - {self.date}"
 
+        return (
+            f"{teacher_name} - "
+            f"{self.classroom} - "
+            f"{self.date}"
+        )
+
+
+# ============================================================
+# ATTENDANCE RECORD
+# ============================================================
 
 class Attendance(models.Model):
 
@@ -59,27 +107,54 @@ class Attendance(models.Model):
         EXCUSED = "Excused", "Excused"
 
     submission = models.ForeignKey(
-        AttendanceSubmission, on_delete=models.CASCADE,
+        AttendanceSubmission,
+        on_delete=models.CASCADE,
         related_name="attendance_records",
     )
+
     student = models.ForeignKey(
-        Student, on_delete=models.CASCADE, related_name="attendance_records",
+        Student,
+        on_delete=models.CASCADE,
+        related_name="attendance_records",
     )
+
     status = models.CharField(
-        max_length=10, choices=Status.choices, default=Status.PRESENT,
+        max_length=10,
+        choices=Status.choices,
+        default=Status.PRESENT,
     )
-    remarks = models.TextField(blank=True, null=True)
-    marked_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+
+    remarks = models.TextField(
+        blank=True,
+        null=True,
+    )
+
+    marked_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
 
     class Meta:
-        ordering = ["student__admission_number"]
-        unique_together = ("submission", "student")
+        ordering = [
+            "student__admission_number",
+        ]
+
+        unique_together = (
+            "submission",
+            "student",
+        )
+
         verbose_name = "Attendance Record"
         verbose_name_plural = "Attendance Records"
 
     def __str__(self):
+
         return (
             f"{self.student.admission_number} - "
-            f"{self.student.first_name} {self.student.last_name} ({self.status})"
+            f"{self.student.first_name} "
+            f"{self.student.last_name} "
+            f"({self.status})"
         )

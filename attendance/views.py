@@ -6,13 +6,21 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import CustomUser, TeacherProfile
+from accounts.models import (
+    CustomUser,
+    TeacherProfile,
+)
+
 from assignments.models import TeacherAssignment
+
 from notifiations.services import create_notification
 
 from students.models import Student
 
-from attendance.models import Attendance, AttendanceSubmission
+from attendance.models import (
+    Attendance,
+    AttendanceSubmission,
+)
 
 from attendance.serializers import (
     BulkAttendanceSerializer,
@@ -21,109 +29,149 @@ from attendance.serializers import (
     StudentAttendanceHistorySerializer,
 )
 
-from attendance.permissions import IsAssignedClassTeacher
+from attendance.permissions import (
+    IsAssignedClassTeacher,
+)
 
 
 # ============================================================
-# APPROVAL STATUS HELPERS
-# ============================================================
-#
-# Your AttendanceSubmission model does not have:
-#
-# AttendanceSubmission.ApprovalStatus
-#
-# So we safely get the actual database value from the model's
-# approval_status field choices.
-#
-# This keeps the views compatible with your existing model.
-# ============================================================
-
-def get_approval_status_value(label):
-    """
-    Return the actual database value for an approval_status label.
-
-    Example:
-        get_approval_status_value("Draft")
-        get_approval_status_value("Approved")
-        get_approval_status_value("Returned")
-        get_approval_status_value("Pending")
-    """
-
-    try:
-        field = AttendanceSubmission._meta.get_field("approval_status")
-
-        choices = field.choices or []
-
-        for value, choice_label in choices:
-            if str(choice_label).strip().lower() == str(label).strip().lower():
-                return value
-
-            if str(value).strip().lower() == str(label).strip().lower():
-                return value
-
-    except Exception:
-        pass
-
-    # Fallback to the values your current system has been using.
-    return label
-
-
-DRAFT_STATUS = get_approval_status_value("Draft")
-RETURNED_STATUS = get_approval_status_value("Returned")
-APPROVED_STATUS = get_approval_status_value("Approved")
-PENDING_STATUS = get_approval_status_value("Pending")
-
-
-# ============================================================
-# SAFE TEACHER PROFILE
+# HELPER — GET TEACHER PROFILE
 # ============================================================
 
 def get_teacher_profile(request):
-    """
-    Safely return the logged-in teacher profile.
-    """
 
     try:
+
         return request.user.teacher_profile
+
     except TeacherProfile.DoesNotExist:
+
+        return None
+
+    except Exception:
+
         return None
 
 
 # ============================================================
-# MARK ATTENDANCE
+# HELPER — VERIFY CLASS TEACHER ASSIGNMENT
 # ============================================================
 
-class MarkAttendanceView(APIView):
-    """
-    GET:
-        Load students for a class-teacher assignment.
+def verify_class_teacher(
+    request,
+    assignment,
+):
 
-    POST:
-        Save attendance.
+    teacher_profile = get_teacher_profile(
+        request
+    )
 
-    IMPORTANT:
-        Attendance is controlled by the class-teacher assignment.
-        TeacherAssignment logic is NOT changed.
-    """
+    if not teacher_profile:
 
-    permission_classes = [IsAssignedClassTeacher]
-
-    # ========================================================
-    # GET — LOAD STUDENTS
-    # ========================================================
-
-    @transaction.atomic
-    def get(self, request):
-
-        assignment_id = request.query_params.get("assignment")
-
-        if not assignment_id:
-            return Response(
+        return (
+            None,
+            Response(
                 {
-                    "error": "Assignment is required."
+                    "error": (
+                        "Only teachers can access "
+                        "attendance."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            ),
+        )
+
+    # --------------------------------------------------------
+    # Teacher must own this assignment
+    # --------------------------------------------------------
+
+    if assignment.teacher_id != teacher_profile.id:
+
+        return (
+            None,
+            Response(
+                {
+                    "error": (
+                        "This assignment does not "
+                        "belong to you."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            ),
+        )
+
+    # --------------------------------------------------------
+    # Must be class teacher
+    # --------------------------------------------------------
+
+    if not assignment.is_class_teacher:
+
+        return (
+            None,
+            Response(
+                {
+                    "error": (
+                        "Only the class teacher can "
+                        "mark attendance for this class."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            ),
+        )
+
+    # --------------------------------------------------------
+    # Assignment must be active
+    # --------------------------------------------------------
+
+    if not assignment.is_active:
+
+        return (
+            None,
+            Response(
+                {
+                    "error": (
+                        "This teaching assignment "
+                        "is inactive."
+                    )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
+            ),
+        )
+
+    return (
+        teacher_profile,
+        None,
+    )
+
+
+# ============================================================
+# CREATE ATTENDANCE SUBMISSION
+# ============================================================
+
+class AttendanceSubmissionCreateView(APIView):
+
+    permission_classes = [
+        IsAssignedClassTeacher
+    ]
+
+    @transaction.atomic
+    def post(self, request):
+
+        serializer = (
+            CreateAttendanceSubmissionSerializer(
+                data=request.data
             )
+        )
+
+        serializer.is_valid(
+            raise_exception=True
+        )
+
+        assignment_id = (
+            serializer.validated_data[
+                "assignment"
+            ]
+        )
 
         # ----------------------------------------------------
         # Get assignment
@@ -139,62 +187,20 @@ class MarkAttendanceView(APIView):
         )
 
         # ----------------------------------------------------
-        # Get teacher profile
+        # Verify class teacher
         # ----------------------------------------------------
 
-        teacher_profile = get_teacher_profile(request)
+        (
+            teacher_profile,
+            error_response,
+        ) = verify_class_teacher(
+            request,
+            assignment,
+        )
 
-        if not teacher_profile:
-            return Response(
-                {
-                    "error": "Only teachers can access attendance."
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        if error_response:
 
-        # ----------------------------------------------------
-        # Verify teacher owns assignment
-        # ----------------------------------------------------
-
-        if assignment.teacher_id != teacher_profile.id:
-
-            return Response(
-                {
-                    "error": "You are not assigned to this teaching assignment."
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # ----------------------------------------------------
-        # IMPORTANT:
-        #
-        # Attendance is only marked through the class-teacher
-        # assignment.
-        # ----------------------------------------------------
-
-        if not assignment.is_class_teacher:
-
-            return Response(
-                {
-                    "error": (
-                        "You are not the class teacher for this classroom."
-                    )
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # ----------------------------------------------------
-        # Assignment must be active
-        # ----------------------------------------------------
-
-        if not assignment.is_active:
-
-            return Response(
-                {
-                    "error": "This assignment is inactive."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return error_response
 
         # ----------------------------------------------------
         # Today's date
@@ -203,33 +209,177 @@ class MarkAttendanceView(APIView):
         today = timezone.localdate()
 
         # ----------------------------------------------------
-        # Create or get attendance submission
+        # Get/create today's attendance session
         # ----------------------------------------------------
 
-        submission, created = AttendanceSubmission.objects.get_or_create(
+        submission, created = (
+            AttendanceSubmission.objects.get_or_create(
 
-            assignment=assignment,
+                assignment=assignment,
 
-            date=today,
+                date=today,
 
-            defaults={
-                "classroom": assignment.classroom,
-                "submitted_by": request.user,
-                "approval_status": DRAFT_STATUS,
-            },
+                defaults={
+                    "classroom": assignment.classroom,
+                    "submitted_by": request.user,
+                    "status": (
+                        AttendanceSubmission.Status.DRAFT
+                    ),
+                },
+            )
         )
 
         # ----------------------------------------------------
-        # If an existing submission belongs to another
-        # classroom, protect against inconsistent data.
+        # Protect classroom relationship
         # ----------------------------------------------------
 
-        if submission.classroom_id != assignment.classroom_id:
+        if (
+            submission.classroom_id
+            != assignment.classroom_id
+        ):
 
-            submission.classroom = assignment.classroom
-            submission.save(
-                update_fields=["classroom"]
+            submission.classroom = (
+                assignment.classroom
             )
+
+            submission.save(
+                update_fields=[
+                    "classroom"
+                ]
+            )
+
+        # ----------------------------------------------------
+        # Response
+        # ----------------------------------------------------
+
+        return Response(
+            {
+                "submission": submission.id,
+
+                "created": created,
+
+                "assignment": assignment.id,
+
+                "classroom": str(
+                    assignment.classroom
+                ),
+
+                "classroom_id":
+                    assignment.classroom_id,
+
+                "subject": (
+                    assignment.subject.name
+                    if assignment.subject
+                    else ""
+                ),
+
+                "subject_id":
+                    assignment.subject_id,
+
+                "date": submission.date,
+
+                "status": submission.status,
+
+                "is_class_teacher":
+                    assignment.is_class_teacher,
+            },
+
+            status=(
+                status.HTTP_201_CREATED
+                if created
+                else status.HTTP_200_OK
+            ),
+        )
+
+
+# ============================================================
+# MARK ATTENDANCE
+# ============================================================
+
+class MarkAttendanceView(APIView):
+
+    permission_classes = [
+        IsAssignedClassTeacher
+    ]
+
+    # ========================================================
+    # GET — LOAD STUDENTS
+    # ========================================================
+
+    @transaction.atomic
+    def get(self, request):
+
+        assignment_id = (
+            request.query_params.get(
+                "assignment"
+            )
+        )
+
+        if not assignment_id:
+
+            return Response(
+                {
+                    "error": (
+                        "Assignment is required."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ----------------------------------------------------
+        # Assignment
+        # ----------------------------------------------------
+
+        assignment = get_object_or_404(
+            TeacherAssignment.objects.select_related(
+                "teacher",
+                "classroom",
+                "subject",
+            ),
+            pk=assignment_id,
+        )
+
+        # ----------------------------------------------------
+        # Verify teacher/class teacher
+        # ----------------------------------------------------
+
+        (
+            teacher_profile,
+            error_response,
+        ) = verify_class_teacher(
+            request,
+            assignment,
+        )
+
+        if error_response:
+
+            return error_response
+
+        # ----------------------------------------------------
+        # Today's date
+        # ----------------------------------------------------
+
+        today = timezone.localdate()
+
+        # ----------------------------------------------------
+        # Get/create submission
+        # ----------------------------------------------------
+
+        submission, created = (
+            AttendanceSubmission.objects.get_or_create(
+
+                assignment=assignment,
+
+                date=today,
+
+                defaults={
+                    "classroom": assignment.classroom,
+                    "submitted_by": request.user,
+                    "status":
+                        AttendanceSubmission.Status.DRAFT,
+                },
+            )
+        )
 
         # ----------------------------------------------------
         # Get students
@@ -237,7 +387,9 @@ class MarkAttendanceView(APIView):
 
         students = (
             Student.objects
-            .filter(classroom=assignment.classroom)
+            .filter(
+                classroom=assignment.classroom
+            )
             .order_by(
                 "admission_number",
                 "first_name",
@@ -247,35 +399,43 @@ class MarkAttendanceView(APIView):
 
         records = []
 
-        # ----------------------------------------------------
-        # Create attendance rows if necessary
-        # ----------------------------------------------------
-
         for student in students:
 
-            attendance, _ = Attendance.objects.get_or_create(
+            attendance, created_record = (
+                Attendance.objects.get_or_create(
 
-                submission=submission,
+                    submission=submission,
 
-                student=student,
+                    student=student,
 
-                defaults={
-                    "status": Attendance.Status.PRESENT,
-                    "remarks": "",
-                },
+                    defaults={
+                        "status":
+                            Attendance.Status.PRESENT,
+
+                        "remarks": "",
+                    },
+                )
             )
 
             records.append(
                 {
                     "id": attendance.id,
+
                     "student": student.id,
-                    "admission_number": student.admission_number,
+
+                    "admission_number":
+                        student.admission_number,
+
                     "name": (
                         f"{student.first_name} "
                         f"{student.last_name}"
                     ).strip(),
-                    "status": attendance.status,
-                    "remarks": attendance.remarks or "",
+
+                    "status":
+                        attendance.status,
+
+                    "remarks":
+                        attendance.remarks or "",
                 }
             )
 
@@ -286,25 +446,55 @@ class MarkAttendanceView(APIView):
         return Response(
             {
                 "submission": submission.id,
+
                 "assignment": assignment.id,
-                "classroom": str(assignment.classroom),
-                "classroom_id": assignment.classroom_id,
+
+                "classroom":
+                    str(assignment.classroom),
+
+                "classroom_id":
+                    assignment.classroom_id,
+
                 "subject": (
                     assignment.subject.name
                     if assignment.subject
                     else ""
                 ),
-                "subject_id": assignment.subject_id,
-                "date": submission.date,
-                "created": created,
-                "is_class_teacher": assignment.is_class_teacher,
-                "students": records,
+
+                "subject_id":
+                    assignment.subject_id,
+
+                "date":
+                    submission.date,
+
+                "status":
+                    submission.status,
+
+                "created":
+                    created,
+
+                "is_class_teacher":
+                    assignment.is_class_teacher,
+
+                "students":
+                    records,
             },
+
             status=status.HTTP_200_OK,
         )
 
     # ========================================================
     # POST — SAVE ATTENDANCE
+    #
+    # NO APPROVAL
+    # NO SUBMIT
+    # NO PENDING
+    #
+    # Saving attendance immediately:
+    #
+    # 1. Saves attendance
+    # 2. Marks submission FINAL
+    # 3. Notifies parent
     # ========================================================
 
     @transaction.atomic
@@ -328,90 +518,93 @@ class MarkAttendanceView(APIView):
                 "assignment__teacher",
             ),
 
-            pk=serializer.validated_data["submission"],
+            pk=serializer.validated_data[
+                "submission"
+            ],
         )
 
         # ----------------------------------------------------
-        # Teacher profile
+        # Teacher
         # ----------------------------------------------------
 
-        teacher_profile = get_teacher_profile(request)
+        teacher_profile = get_teacher_profile(
+            request
+        )
 
         if not teacher_profile:
 
             return Response(
                 {
-                    "error": "Only teachers can save attendance."
+                    "error": (
+                        "Only teachers can "
+                        "save attendance."
+                    )
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         # ----------------------------------------------------
-        # Verify assignment teacher
+        # Assignment
+        # ----------------------------------------------------
+
+        assignment = submission.assignment
+
+        # ----------------------------------------------------
+        # Teacher owns assignment
         # ----------------------------------------------------
 
         if (
-            not submission.assignment
-            or submission.assignment.teacher_id
+            not assignment
+            or assignment.teacher_id
             != teacher_profile.id
         ):
 
             return Response(
                 {
                     "error": (
-                        "This attendance submission does not "
-                        "belong to you."
+                        "This attendance submission "
+                        "does not belong to you."
                     )
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         # ----------------------------------------------------
-        # Verify class teacher
+        # Must be class teacher
         # ----------------------------------------------------
 
-        if not submission.assignment.is_class_teacher:
+        if not assignment.is_class_teacher:
 
             return Response(
                 {
                     "error": (
-                        "Only the class teacher can save "
-                        "attendance for this class."
+                        "Only the class teacher can "
+                        "save attendance for this class."
                     )
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         # ----------------------------------------------------
-        # Verify active assignment
+        # Active
         # ----------------------------------------------------
 
-        if not submission.assignment.is_active:
-
-            return Response(
-                {
-                    "error": "This assignment is inactive."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # ----------------------------------------------------
-        # Check approval status
-        # ----------------------------------------------------
-
-        if submission.approval_status not in [
-            DRAFT_STATUS,
-            RETURNED_STATUS,
-        ]:
+        if not assignment.is_active:
 
             return Response(
                 {
                     "error": (
-                        "Attendance has already been finalized."
+                        "This assignment is inactive."
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # ----------------------------------------------------
+        # Date
+        # ----------------------------------------------------
+
+        attendance_date = submission.date
 
         # ----------------------------------------------------
         # Teacher name
@@ -422,13 +615,19 @@ class MarkAttendanceView(APIView):
             or request.user.username
         )
 
-        attendance_date = submission.date
+        saved_records = []
 
-        # ----------------------------------------------------
-        # Save attendance records
-        # ----------------------------------------------------
+        notifications_sent = 0
 
-        for record in serializer.validated_data["records"]:
+        # ====================================================
+        # SAVE EACH STUDENT
+        # ====================================================
+
+        for record in (
+            serializer.validated_data[
+                "records"
+            ]
+        ):
 
             student = get_object_or_404(
                 Student,
@@ -438,24 +637,61 @@ class MarkAttendanceView(APIView):
             # ------------------------------------------------
             # SECURITY:
             #
-            # Student must belong to the classroom attached
-            # to this attendance submission.
+            # Student must belong to this classroom.
             # ------------------------------------------------
 
-            if student.classroom_id != submission.classroom_id:
+            if (
+                student.classroom_id
+                != submission.classroom_id
+            ):
 
                 return Response(
                     {
                         "error": (
                             f"{student.first_name} "
-                            f"{student.last_name} does not "
-                            "belong to this classroom."
+                            f"{student.last_name} "
+                            "does not belong to this "
+                            "classroom."
                         )
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            attendance, _ = (
+            new_status = record["status"]
+
+            new_remarks = (
+                record.get("remarks")
+                or ""
+            ).strip()
+
+            # ------------------------------------------------
+            # Find existing attendance
+            # ------------------------------------------------
+
+            existing_attendance = (
+                Attendance.objects.filter(
+                    submission=submission,
+                    student=student,
+                ).first()
+            )
+
+            old_status = (
+                existing_attendance.status
+                if existing_attendance
+                else None
+            )
+
+            old_remarks = (
+                existing_attendance.remarks or ""
+                if existing_attendance
+                else ""
+            )
+
+            # ------------------------------------------------
+            # Save attendance
+            # ------------------------------------------------
+
+            attendance, created_record = (
                 Attendance.objects.update_or_create(
 
                     submission=submission,
@@ -463,52 +699,85 @@ class MarkAttendanceView(APIView):
                     student=student,
 
                     defaults={
-                        "status": record["status"],
-                        "remarks": (
-                            record.get("remarks", "")
-                            or ""
-                        ),
+                        "status": new_status,
+                        "remarks": new_remarks,
                     },
                 )
             )
 
+            saved_records.append(
+                {
+                    "id": attendance.id,
+                    "student": student.id,
+                    "status": attendance.status,
+                    "remarks":
+                        attendance.remarks or "",
+                }
+            )
+
             # =================================================
-            # NOTIFY PARENT
+            # PARENT NOTIFICATION
+            #
+            # Notify when:
+            #
+            # - first attendance is created
+            # - status changes
+            # - remarks change
             # =================================================
+
+            attendance_changed = (
+                created_record
+                or old_status != new_status
+                or old_remarks != new_remarks
+            )
+
+            if not attendance_changed:
+                continue
 
             parent_user = None
 
             try:
 
-                if hasattr(student, "parent") and student.parent:
+                parent = getattr(
+                    student,
+                    "parent",
+                    None,
+                )
+
+                if parent:
 
                     parent_user = getattr(
-                        student.parent,
+                        parent,
                         "user",
                         None,
                     )
 
-            except Exception:
+            except Exception as parent_error:
+
+                print(
+                    "Parent lookup error:",
+                    parent_error,
+                )
 
                 parent_user = None
 
             # ------------------------------------------------
-            # Send notification
+            # Notify parent
             # ------------------------------------------------
 
             if parent_user:
 
                 title = (
-                    f"Attendance: "
+                    "Attendance: "
                     f"{student.first_name} — "
                     f"{attendance.status}"
                 )
 
                 message = (
-                    f"Dear Parent, your child "
+                    "Dear Parent, your child "
                     f"{student.first_name} "
                     f"{student.last_name} "
-                    f"was marked as "
+                    "was marked as "
                     f"{attendance.status} "
                     f"on {attendance_date}. "
                     f"Marked by: {teacher_name}."
@@ -517,209 +786,178 @@ class MarkAttendanceView(APIView):
                 if attendance.remarks:
 
                     message += (
-                        f" Remarks: "
+                        " Remarks: "
                         f"{attendance.remarks}"
                     )
 
                 try:
 
                     create_notification(
+
                         recipient=parent_user,
+
                         triggered_by=request.user,
+
                         attendance=attendance,
+
                         title=title,
+
                         message=message,
+
                         notification_type="Attendance",
                     )
 
+                    notifications_sent += 1
+
                 except Exception as notification_error:
 
-                    # Do not destroy attendance marking because
-                    # of a notification problem.
+                    # Attendance should remain saved even
+                    # if notification creation fails.
+
                     print(
                         "Attendance notification error:",
                         notification_error,
                     )
 
-        # =====================================================
-        # AUTO-FINALIZE
-        # =====================================================
+        # ====================================================
+        # FINALIZE IMMEDIATELY
+        # ====================================================
 
-        submission.approval_status = APPROVED_STATUS
+        submission.status = (
+            AttendanceSubmission.Status.FINAL
+        )
+
         submission.submitted_by = request.user
+
         submission.submitted_at = timezone.now()
 
         submission.save(
             update_fields=[
-                "approval_status",
+                "status",
                 "submitted_by",
                 "submitted_at",
+                "updated_at",
             ]
         )
 
-        # =====================================================
+        # ====================================================
         # RESPONSE
-        # =====================================================
+        # ====================================================
 
         return Response(
             {
                 "message": (
-                    "Attendance marked successfully. "
-                    "Parents have been notified."
+                    "Attendance marked successfully."
                 ),
-                "submission": submission.id,
-                "classroom": str(submission.classroom),
-                "date": submission.date,
+
+                "submission":
+                    submission.id,
+
+                "classroom":
+                    str(submission.classroom),
+
+                "date":
+                    submission.date,
+
+                "status":
+                    submission.status,
+
+                "saved_records":
+                    saved_records,
+
+                "notifications_sent":
+                    notifications_sent,
+
+                "parent_notified":
+                    notifications_sent > 0,
             },
+
             status=status.HTTP_200_OK,
         )
 
 
 # ============================================================
 # SUBMIT ATTENDANCE
+#
+# KEPT ONLY FOR BACKWARD COMPATIBILITY.
+#
+# The React application does NOT need to call this.
+#
+# There is no approval workflow.
 # ============================================================
 
 class SubmitAttendanceView(APIView):
 
-    permission_classes = [IsAssignedClassTeacher]
+    permission_classes = [
+        IsAssignedClassTeacher
+    ]
 
     @transaction.atomic
     def post(self, request):
 
-        serializer = CreateAttendanceSubmissionSerializer(
-            data=request.data
+        serializer = (
+            CreateAttendanceSubmissionSerializer(
+                data=request.data
+            )
         )
 
         serializer.is_valid(
             raise_exception=True
         )
 
-        submission = get_object_or_404(
-
-            AttendanceSubmission.objects
-            .select_for_update()
-            .select_related(
-                "classroom",
-                "assignment",
-                "assignment__teacher",
-            ),
-
-            pk=serializer.validated_data["submission"],
+        submission_id = (
+            serializer.validated_data.get(
+                "submission"
+            )
         )
 
         # ----------------------------------------------------
-        # Teacher profile
+        # This serializer normally receives assignment,
+        # but old frontend may send submission.
         # ----------------------------------------------------
 
-        teacher_profile = get_teacher_profile(request)
-
-        if not teacher_profile:
+        if submission_id is None:
 
             return Response(
                 {
                     "error": (
-                        "Only teachers can submit attendance."
-                    )
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # ----------------------------------------------------
-        # Verify class teacher assignment
-        # ----------------------------------------------------
-
-        assigned = TeacherAssignment.objects.filter(
-
-            teacher=teacher_profile,
-
-            classroom=submission.classroom,
-
-            is_class_teacher=True,
-
-            is_active=True,
-
-        ).exists()
-
-        if not assigned:
-
-            return Response(
-                {
-                    "error": (
-                        "You are not the class teacher "
-                        "for this classroom."
-                    )
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # ----------------------------------------------------
-        # Already approved
-        # ----------------------------------------------------
-
-        if submission.approval_status == APPROVED_STATUS:
-
-            return Response(
-                {
-                    "error": (
-                        "Attendance has already been finalized."
+                        "Attendance is saved directly "
+                        "when marked. A separate submit "
+                        "step is no longer required."
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        # ----------------------------------------------------
-        # Attendance records
-        # ----------------------------------------------------
-
-        if not submission.attendance_records.exists():
-
-            return Response(
-                {
-                    "error": (
-                        "Cannot submit attendance before "
-                        "marking students."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # ----------------------------------------------------
-        # Finalize
-        # ----------------------------------------------------
-
-        submission.approval_status = APPROVED_STATUS
-        submission.submitted_by = request.user
-        submission.submitted_at = timezone.now()
-
-        submission.save(
-            update_fields=[
-                "approval_status",
-                "submitted_by",
-                "submitted_at",
-            ]
-        )
 
         return Response(
             {
                 "message": (
-                    "Attendance submitted and finalized."
+                    "Attendance is already saved "
+                    "automatically. No approval or "
+                    "submit step is required."
                 ),
-                "submission": submission.id,
-                "classroom": str(submission.classroom),
-                "date": submission.date,
+
+                "submission":
+                    submission_id,
             },
+
             status=status.HTTP_200_OK,
         )
 
 
 # ============================================================
 # ATTENDANCE DETAIL
+#
 # ADMIN / ACADEMIC COORDINATOR
 # ============================================================
 
 class AttendanceDetailView(APIView):
 
-    def get(self, request, submission_id):
+    def get(
+        self,
+        request,
+        submission_id,
+    ):
 
         if request.user.role not in [
             CustomUser.Role.SUPER_ADMIN,
@@ -738,6 +976,9 @@ class AttendanceDetailView(APIView):
             AttendanceSubmission.objects.select_related(
                 "classroom",
                 "submitted_by",
+                "assignment",
+                "assignment__teacher",
+                "assignment__subject",
             ),
 
             pk=submission_id,
@@ -745,8 +986,12 @@ class AttendanceDetailView(APIView):
 
         records = (
             Attendance.objects
-            .filter(submission=submission)
-            .select_related("student")
+            .filter(
+                submission=submission
+            )
+            .select_related(
+                "student"
+            )
         )
 
         serializer = AttendanceDetailSerializer(
@@ -756,11 +1001,25 @@ class AttendanceDetailView(APIView):
 
         return Response(
             {
-                "submission": submission.id,
-                "classroom": str(submission.classroom),
-                "date": submission.date,
-                "attendance": serializer.data,
+                "submission":
+                    submission.id,
+
+                "assignment":
+                    submission.assignment_id,
+
+                "classroom":
+                    str(submission.classroom),
+
+                "date":
+                    submission.date,
+
+                "status":
+                    submission.status,
+
+                "attendance":
+                    serializer.data,
             },
+
             status=status.HTTP_200_OK,
         )
 
@@ -771,22 +1030,33 @@ class AttendanceDetailView(APIView):
 
 class StudentAttendanceHistoryView(APIView):
 
-    def get(self, request, student_id):
+    def get(
+        self,
+        request,
+        student_id,
+    ):
 
         student = get_object_or_404(
-            Student.objects.select_related("classroom"),
+
+            Student.objects.select_related(
+                "classroom"
+            ),
+
             pk=student_id,
         )
 
         # ----------------------------------------------------
-        # Only finalized attendance
+        # Only FINAL attendance counts.
         # ----------------------------------------------------
 
         records = (
             Attendance.objects
             .filter(
                 student=student,
-                submission__approval_status=APPROVED_STATUS,
+
+                submission__status=(
+                    AttendanceSubmission.Status.FINAL
+                ),
             )
             .select_related(
                 "submission",
@@ -797,9 +1067,11 @@ class StudentAttendanceHistoryView(APIView):
             )
         )
 
-        serializer = StudentAttendanceHistorySerializer(
-            records,
-            many=True,
+        serializer = (
+            StudentAttendanceHistorySerializer(
+                records,
+                many=True,
+            )
         )
 
         total = records.count()
@@ -817,7 +1089,10 @@ class StudentAttendanceHistoryView(APIView):
         ).count()
 
         attendance_percentage = (
-            round((present / total) * 100, 2)
+            round(
+                (present / total) * 100,
+                2,
+            )
             if total > 0
             else 0
         )
@@ -825,221 +1100,45 @@ class StudentAttendanceHistoryView(APIView):
         return Response(
             {
                 "student": {
-                    "id": student.id,
-                    "admission_number": student.admission_number,
+
+                    "id":
+                        student.id,
+
+                    "admission_number":
+                        student.admission_number,
+
                     "name": (
                         f"{student.first_name} "
                         f"{student.last_name}"
                     ).strip(),
-                    "classroom": str(
-                        student.classroom
-                    ),
+
+                    "classroom":
+                        str(student.classroom),
                 },
 
                 "summary": {
-                    "total_days": total,
-                    "present": present,
-                    "absent": absent,
-                    "excused": excused,
+
+                    "total_days":
+                        total,
+
+                    "present":
+                        present,
+
+                    "absent":
+                        absent,
+
+                    "excused":
+                        excused,
+
                     "attendance_percentage":
                         attendance_percentage,
                 },
 
-                "attendance": serializer.data,
+                "attendance":
+                    serializer.data,
             },
 
             status=status.HTTP_200_OK,
-        )
-
-
-# ============================================================
-# CREATE ATTENDANCE SUBMISSION
-# ============================================================
-
-class AttendanceSubmissionCreateView(APIView):
-
-    permission_classes = [IsAssignedClassTeacher]
-
-    @transaction.atomic
-    def post(self, request):
-
-        serializer = CreateAttendanceSubmissionSerializer(
-            data=request.data
-        )
-
-        serializer.is_valid(
-            raise_exception=True
-        )
-
-        assignment = get_object_or_404(
-
-            TeacherAssignment.objects.select_related(
-                "teacher",
-                "classroom",
-                "subject",
-            ),
-
-            pk=serializer.validated_data["assignment"],
-        )
-
-        # ----------------------------------------------------
-        # Teacher profile
-        # ----------------------------------------------------
-
-        teacher_profile = get_teacher_profile(request)
-
-        if not teacher_profile:
-
-            return Response(
-                {
-                    "error": (
-                        "Only teachers can create attendance."
-                    )
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # ----------------------------------------------------
-        # Verify teacher
-        # ----------------------------------------------------
-
-        if assignment.teacher_id != teacher_profile.id:
-
-            return Response(
-                {
-                    "error": (
-                        "This assignment does not belong "
-                        "to you."
-                    )
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # ----------------------------------------------------
-        # Verify class teacher
-        # ----------------------------------------------------
-
-        if not assignment.is_class_teacher:
-
-            return Response(
-                {
-                    "error": (
-                        "Only the class teacher can "
-                        "mark this class."
-                    )
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # ----------------------------------------------------
-        # Active assignment
-        # ----------------------------------------------------
-
-        if not assignment.is_active:
-
-            return Response(
-                {
-                    "error": (
-                        "This assignment is inactive."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # ----------------------------------------------------
-        # Today's attendance
-        # ----------------------------------------------------
-
-        today = timezone.localdate()
-
-        # ----------------------------------------------------
-        # Create or get submission
-        # ----------------------------------------------------
-
-        submission, created = (
-            AttendanceSubmission.objects.get_or_create(
-
-                assignment=assignment,
-
-                date=today,
-
-                defaults={
-                    "classroom": assignment.classroom,
-                    "submitted_by": request.user,
-                    "approval_status": DRAFT_STATUS,
-                },
-            )
-        )
-
-        # ----------------------------------------------------
-        # Make sure classroom is correct
-        # ----------------------------------------------------
-
-        if submission.classroom_id != assignment.classroom_id:
-
-            submission.classroom = assignment.classroom
-
-            submission.save(
-                update_fields=["classroom"]
-            )
-
-        # ----------------------------------------------------
-        # IMPORTANT:
-        #
-        # If the attendance was already approved today,
-        # don't silently create a new draft.
-        # ----------------------------------------------------
-
-        if (
-            not created
-            and submission.approval_status
-            == APPROVED_STATUS
-        ):
-
-            return Response(
-                {
-                    "submission": submission.id,
-                    "created": False,
-                    "already_finalized": True,
-                    "classroom": str(
-                        assignment.classroom
-                    ),
-                    "date": submission.date,
-                    "message": (
-                        "Attendance for this class "
-                        "has already been finalized today."
-                    ),
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        return Response(
-            {
-                "submission": submission.id,
-                "created": created,
-                "already_finalized": False,
-                "assignment": assignment.id,
-                "classroom": str(
-                    assignment.classroom
-                ),
-                "classroom_id":
-                    assignment.classroom_id,
-                "subject": (
-                    assignment.subject.name
-                    if assignment.subject
-                    else ""
-                ),
-                "subject_id":
-                    assignment.subject_id,
-                "date": submission.date,
-                "is_class_teacher":
-                    assignment.is_class_teacher,
-            },
-            status=(
-                status.HTTP_201_CREATED
-                if created
-                else status.HTTP_200_OK
-            ),
         )
 
 
@@ -1049,11 +1148,18 @@ class AttendanceSubmissionCreateView(APIView):
 
 class TeacherAttendanceHistoryView(APIView):
 
-    permission_classes = [IsAssignedClassTeacher]
+    permission_classes = [
+        IsAssignedClassTeacher
+    ]
 
-    def get(self, request):
+    def get(
+        self,
+        request,
+    ):
 
-        teacher_profile = get_teacher_profile(request)
+        teacher_profile = (
+            get_teacher_profile(request)
+        )
 
         if not teacher_profile:
 
@@ -1067,10 +1173,6 @@ class TeacherAttendanceHistoryView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # ----------------------------------------------------
-        # Attendance marked by this teacher
-        # ----------------------------------------------------
-
         records = (
             Attendance.objects
             .filter(
@@ -1080,6 +1182,8 @@ class TeacherAttendanceHistoryView(APIView):
                 "student",
                 "submission",
                 "submission__classroom",
+                "submission__assignment",
+                "submission__assignment__subject",
             )
             .order_by(
                 "-submission__date",
@@ -1090,10 +1194,6 @@ class TeacherAttendanceHistoryView(APIView):
         data = []
 
         for record in records:
-
-            # ------------------------------------------------
-            # Student name
-            # ------------------------------------------------
 
             student_name = (
                 f"{record.student.first_name or ''} "
@@ -1106,19 +1206,33 @@ class TeacherAttendanceHistoryView(APIView):
                     f"Student #{record.student_id}"
                 )
 
-            # ------------------------------------------------
-            # Classroom
-            # ------------------------------------------------
-
             classroom_name = (
-                str(record.submission.classroom)
+                str(
+                    record.submission.classroom
+                )
                 if record.submission.classroom
                 else "Unknown Class"
             )
 
+            subject_name = ""
+
+            if (
+                record.submission.assignment
+                and record.submission.assignment.subject
+            ):
+
+                subject_name = (
+                    record
+                    .submission
+                    .assignment
+                    .subject
+                    .name
+                )
+
             data.append(
                 {
-                    "id": record.id,
+                    "id":
+                        record.id,
 
                     "submission":
                         record.submission.id,
@@ -1128,6 +1242,9 @@ class TeacherAttendanceHistoryView(APIView):
 
                     "classroom_name":
                         classroom_name,
+
+                    "subject_name":
+                        subject_name,
 
                     "student_name":
                         student_name,
@@ -1144,6 +1261,9 @@ class TeacherAttendanceHistoryView(APIView):
 
                     "remarks":
                         record.remarks or "",
+
+                    "submission_status":
+                        record.submission.status,
                 }
             )
 
