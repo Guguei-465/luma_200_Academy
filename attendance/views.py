@@ -324,3 +324,36 @@ class AttendanceSubmissionCreateView(APIView):
             "classroom": str(assignment.classroom),
             "date": submission.date,
         }, status=status.HTTP_201_CREATED)
+
+
+# =====================================================
+# ✅ TEACHER ATTENDANCE HISTORY — NEW
+# =====================================================
+class TeacherAttendanceHistoryView(APIView):
+    permission_classes = [IsAssignedClassTeacher]
+
+    def get(self, request):
+        try:
+            teacher_profile = request.user.teacher_profile
+        except TeacherProfile.DoesNotExist:
+            return Response({"error": "Only teachers can view history."}, status=403)
+
+        # Get all finalized attendance marked by this teacher
+        records = Attendance.objects.filter(
+            submission__submitted_by=request.user,
+            submission__approval_status=AttendanceSubmission.ApprovalStatus.APPROVED,
+        ).select_related("student", "submission", "submission__classroom").order_by("-submission__date")
+
+        data = []
+        for rec in records:
+            data.append({
+                "id": rec.id,
+                "date": rec.submission.date,
+                "classroom": str(rec.submission.classroom),
+                "student_name": f"{rec.student.first_name} {rec.student.last_name}",
+                "admission_number": rec.student.admission_number,
+                "status": rec.status,
+                "remarks": rec.remarks,
+            })
+
+        return Response(data, status=200)

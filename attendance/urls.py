@@ -5,6 +5,7 @@ from .views import (
     SubmitAttendanceView,
     AttendanceDetailView,
     StudentAttendanceHistoryView,
+    TeacherAttendanceHistoryView
 )
 
 urlpatterns = [
@@ -13,4 +14,5 @@ urlpatterns = [
     path("create/", AttendanceSubmissionCreateView.as_view(), name="attendance-create"),
     path("<int:submission_id>/", AttendanceDetailView.as_view(), name="attendance-detail"),
     path("student/<int:student_id>/", StudentAttendanceHistoryView.as_view(), name="student-attendance-history"),
+    path("teacher/history/", TeacherAttendanceHistoryView.as_view(), name="teacher-attendance-history"),
 ]
