@@ -333,12 +333,9 @@ class TeacherAttendanceHistoryView(APIView):
     permission_classes = [IsAssignedClassTeacher]
 
     def get(self, request):
-        try:
-            teacher_profile = request.user.teacher_profile
-        except TeacherProfile.DoesNotExist:
+        if not hasattr(request.user, "teacher_profile"):
             return Response({"error": "Only teachers can view history."}, status=403)
 
-        # Get all finalized attendance marked by this teacher
         records = Attendance.objects.filter(
             submission__submitted_by=request.user,
             submission__approval_status=AttendanceSubmission.ApprovalStatus.APPROVED,
@@ -346,14 +343,14 @@ class TeacherAttendanceHistoryView(APIView):
 
         data = []
         for rec in records:
+            student_name = f"{rec.student.first_name or ''} {rec.student.last_name or ''}".strip() or f"Student #{rec.student_id}"
             data.append({
                 "id": rec.id,
                 "date": rec.submission.date,
-                "classroom": str(rec.submission.classroom),
-                "student_name": f"{rec.student.first_name} {rec.student.last_name}",
-                "admission_number": rec.student.admission_number,
+                "classroom_name": str(rec.submission.classroom),
+                "student_name": student_name,
+                "admission_number": getattr(rec.student, "admission_number", "N/A"),
                 "status": rec.status,
-                "remarks": rec.remarks,
+                "remarks": rec.remarks or "",
             })
-
-        return Response(data, status=200)
+        return Response(data)
