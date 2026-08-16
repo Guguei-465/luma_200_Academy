@@ -1,6 +1,13 @@
+from django.db import transaction
+
 from .models import Notification
 
 
+# ============================================================
+# CREATE SINGLE NOTIFICATION
+# ============================================================
+
+@transaction.atomic
 def create_notification(
     recipient,
     title,
@@ -9,10 +16,34 @@ def create_notification(
     triggered_by=None,
     attendance=None,
 ):
-    if recipient is None:
-        raise ValueError("Recipient cannot be None.")
+    """
+    Create one notification for one user.
 
-    return Notification.objects.create(
+    This is used by attendance, fees, results,
+    announcements, and other parts of Luma.
+    """
+
+    if recipient is None:
+        raise ValueError(
+            "Recipient cannot be None."
+        )
+
+    if not title:
+        raise ValueError(
+            "Notification title cannot be empty."
+        )
+
+    if not message:
+        raise ValueError(
+            "Notification message cannot be empty."
+        )
+
+    if not notification_type:
+        raise ValueError(
+            "Notification type cannot be empty."
+        )
+
+    notification = Notification.objects.create(
         recipient=recipient,
         triggered_by=triggered_by,
         attendance=attendance,
@@ -21,7 +52,14 @@ def create_notification(
         notification_type=notification_type,
     )
 
+    return notification
 
+
+# ============================================================
+# CREATE BULK NOTIFICATIONS
+# ============================================================
+
+@transaction.atomic
 def create_bulk_notifications(
     recipients,
     title,
@@ -29,6 +67,13 @@ def create_bulk_notifications(
     notification_type,
     triggered_by=None,
 ):
+    """
+    Create notifications for multiple users.
+    """
+
+    if not recipients:
+        return []
+
     notifications = [
         Notification(
             recipient=user,
@@ -38,5 +83,12 @@ def create_bulk_notifications(
             notification_type=notification_type,
         )
         for user in recipients
+        if user is not None
     ]
-    return Notification.objects.bulk_create(notifications)
+
+    if not notifications:
+        return []
+
+    return Notification.objects.bulk_create(
+        notifications
+    )
