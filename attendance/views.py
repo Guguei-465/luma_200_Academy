@@ -39,17 +39,18 @@ from attendance.permissions import (
 # ============================================================
 
 def get_teacher_profile(request):
+    """
+    Safely return the TeacherProfile belonging to the
+    currently authenticated user.
+    """
 
     try:
-
         return request.user.teacher_profile
 
     except TeacherProfile.DoesNotExist:
-
         return None
 
     except Exception:
-
         return None
 
 
@@ -61,10 +62,16 @@ def verify_class_teacher(
     request,
     assignment,
 ):
+    """
+    Verify that:
 
-    teacher_profile = get_teacher_profile(
-        request
-    )
+    1. Logged-in user is a teacher.
+    2. Teacher owns the assignment.
+    3. Assignment is marked as Class Teacher.
+    4. Assignment is active.
+    """
+
+    teacher_profile = get_teacher_profile(request)
 
     if not teacher_profile:
 
@@ -199,7 +206,6 @@ class AttendanceSubmissionCreateView(APIView):
         )
 
         if error_response:
-
             return error_response
 
         # ----------------------------------------------------
@@ -352,7 +358,6 @@ class MarkAttendanceView(APIView):
         )
 
         if error_response:
-
             return error_response
 
         # ----------------------------------------------------
@@ -486,15 +491,16 @@ class MarkAttendanceView(APIView):
     # ========================================================
     # POST — SAVE ATTENDANCE
     #
+    # ONE CLICK:
+    #
+    # 1. Save attendance
+    # 2. Finalize attendance
+    # 3. Find student's parent
+    # 4. Create parent notification
+    #
     # NO APPROVAL
-    # NO SUBMIT
+    # NO SECOND BUTTON
     # NO PENDING
-    #
-    # Saving attendance immediately:
-    #
-    # 1. Saves attendance
-    # 2. Marks submission FINAL
-    # 3. Notifies parent
     # ========================================================
 
     @transaction.atomic
@@ -516,6 +522,7 @@ class MarkAttendanceView(APIView):
                 "assignment",
                 "classroom",
                 "assignment__teacher",
+                "assignment__subject",
             ),
 
             pk=serializer.validated_data[
@@ -549,13 +556,24 @@ class MarkAttendanceView(APIView):
 
         assignment = submission.assignment
 
+        if not assignment:
+
+            return Response(
+                {
+                    "error": (
+                        "This attendance submission "
+                        "has no teaching assignment."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # ----------------------------------------------------
         # Teacher owns assignment
         # ----------------------------------------------------
 
         if (
-            not assignment
-            or assignment.teacher_id
+            assignment.teacher_id
             != teacher_profile.id
         ):
 
@@ -586,7 +604,7 @@ class MarkAttendanceView(APIView):
             )
 
         # ----------------------------------------------------
-        # Active
+        # Active assignment
         # ----------------------------------------------------
 
         if not assignment.is_active:
@@ -601,7 +619,7 @@ class MarkAttendanceView(APIView):
             )
 
         # ----------------------------------------------------
-        # Date
+        # Attendance date
         # ----------------------------------------------------
 
         attendance_date = submission.date
@@ -615,9 +633,19 @@ class MarkAttendanceView(APIView):
             or request.user.username
         )
 
+        # ----------------------------------------------------
+        # Tracking
+        # ----------------------------------------------------
+
         saved_records = []
 
         notifications_sent = 0
+
+        parents_notified = []
+
+        students_without_parent = []
+
+        notification_errors = []
 
         # ====================================================
         # SAVE EACH STUDENT
@@ -630,7 +658,10 @@ class MarkAttendanceView(APIView):
         ):
 
             student = get_object_or_404(
-                Student,
+                Student.objects.select_related(
+                    "parent",
+                    "parent__user",
+                ),
                 pk=record["student"],
             )
 
@@ -657,6 +688,10 @@ class MarkAttendanceView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # ------------------------------------------------
+            # New values
+            # ------------------------------------------------
+
             new_status = record["status"]
 
             new_remarks = (
@@ -665,7 +700,7 @@ class MarkAttendanceView(APIView):
             ).strip()
 
             # ------------------------------------------------
-            # Find existing attendance
+            # Existing attendance
             # ------------------------------------------------
 
             existing_attendance = (
@@ -707,22 +742,27 @@ class MarkAttendanceView(APIView):
 
             saved_records.append(
                 {
-                    "id": attendance.id,
-                    "student": student.id,
-                    "status": attendance.status,
+                    "id":
+                        attendance.id,
+
+                    "student":
+                        student.id,
+
+                    "student_name": (
+                        f"{student.first_name} "
+                        f"{student.last_name}"
+                    ).strip(),
+
+                    "status":
+                        attendance.status,
+
                     "remarks":
                         attendance.remarks or "",
                 }
             )
 
             # =================================================
-            # PARENT NOTIFICATION
-            #
-            # Notify when:
-            #
-            # - first attendance is created
-            # - status changes
-            # - remarks change
+            # DETERMINE WHETHER ATTENDANCE CHANGED
             # =================================================
 
             attendance_changed = (
@@ -734,90 +774,220 @@ class MarkAttendanceView(APIView):
             if not attendance_changed:
                 continue
 
-            parent_user = None
+            # =================================================
+            # FIND PARENT
+            #
+            # Student:
+            #
+            # student.parent
+            #
+            # ParentProfile:
+            #
+            # student.parent.user
+            # =================================================
+
+            parent_profile = getattr(
+                student,
+                "parent",
+                None,
+            )
+
+            if not parent_profile:
+
+                students_without_parent.append(
+                    {
+                        "student_id":
+                            student.id,
+
+                        "student_name": (
+                            f"{student.first_name} "
+                            f"{student.last_name}"
+                        ).strip(),
+
+                        "admission_number":
+                            student.admission_number,
+
+                        "reason":
+                            "Student has no parent profile."
+                    }
+                )
+
+                print(
+                    "⚠️ No ParentProfile found for student:",
+                    student.id,
+                    student.first_name,
+                    student.last_name,
+                )
+
+                continue
+
+            # ------------------------------------------------
+            # Parent user
+            # ------------------------------------------------
+
+            parent_user = getattr(
+                parent_profile,
+                "user",
+                None,
+            )
+
+            if not parent_user:
+
+                students_without_parent.append(
+                    {
+                        "student_id":
+                            student.id,
+
+                        "student_name": (
+                            f"{student.first_name} "
+                            f"{student.last_name}"
+                        ).strip(),
+
+                        "admission_number":
+                            student.admission_number,
+
+                        "reason":
+                            "ParentProfile has no user."
+                    }
+                )
+
+                print(
+                    "⚠️ ParentProfile has no user:",
+                    parent_profile.id,
+                )
+
+                continue
+
+            # =================================================
+            # CREATE PARENT NOTIFICATION
+            # =================================================
+
+            title = (
+                "Attendance: "
+                f"{student.first_name} — "
+                f"{attendance.status}"
+            )
+
+            message = (
+                "Dear Parent, your child "
+                f"{student.first_name} "
+                f"{student.last_name} "
+                "was marked as "
+                f"{attendance.status} "
+                f"on {attendance_date}. "
+                f"Marked by: {teacher_name}."
+            )
+
+            if attendance.remarks:
+
+                message += (
+                    " Remarks: "
+                    f"{attendance.remarks}"
+                )
+
+            print(
+                "📢 Creating attendance notification..."
+            )
+
+            print(
+                "   Student:",
+                student.id,
+                student.first_name,
+                student.last_name,
+            )
+
+            print(
+                "   ParentProfile:",
+                parent_profile.id,
+            )
+
+            print(
+                "   Parent User:",
+                parent_user.id,
+                parent_user.username,
+            )
+
+            print(
+                "   Attendance:",
+                attendance.id,
+            )
 
             try:
 
-                parent = getattr(
-                    student,
-                    "parent",
-                    None,
+                notification = create_notification(
+
+                    recipient=parent_user,
+
+                    triggered_by=request.user,
+
+                    attendance=attendance,
+
+                    title=title,
+
+                    message=message,
+
+                    notification_type="Attendance",
                 )
 
-                if parent:
+                notifications_sent += 1
 
-                    parent_user = getattr(
-                        parent,
-                        "user",
-                        None,
-                    )
+                parents_notified.append(
+                    {
+                        "parent_id":
+                            parent_user.id,
 
-            except Exception as parent_error:
+                        "parent_username":
+                            parent_user.username,
+
+                        "student_id":
+                            student.id,
+
+                        "student_name": (
+                            f"{student.first_name} "
+                            f"{student.last_name}"
+                        ).strip(),
+
+                        "notification_id":
+                            notification.id,
+                    }
+                )
 
                 print(
-                    "Parent lookup error:",
-                    parent_error,
+                    "✅ Parent notification created:",
+                    notification.id,
                 )
 
-                parent_user = None
+            except Exception as notification_error:
 
-            # ------------------------------------------------
-            # Notify parent
-            # ------------------------------------------------
-
-            if parent_user:
-
-                title = (
-                    "Attendance: "
-                    f"{student.first_name} — "
-                    f"{attendance.status}"
+                error_message = str(
+                    notification_error
                 )
 
-                message = (
-                    "Dear Parent, your child "
-                    f"{student.first_name} "
-                    f"{student.last_name} "
-                    "was marked as "
-                    f"{attendance.status} "
-                    f"on {attendance_date}. "
-                    f"Marked by: {teacher_name}."
+                notification_errors.append(
+                    {
+                        "student_id":
+                            student.id,
+
+                        "student_name": (
+                            f"{student.first_name} "
+                            f"{student.last_name}"
+                        ).strip(),
+
+                        "parent_id":
+                            parent_user.id,
+
+                        "parent_username":
+                            parent_user.username,
+
+                        "error":
+                            error_message,
+                    }
                 )
 
-                if attendance.remarks:
-
-                    message += (
-                        " Remarks: "
-                        f"{attendance.remarks}"
-                    )
-
-                try:
-
-                    create_notification(
-
-                        recipient=parent_user,
-
-                        triggered_by=request.user,
-
-                        attendance=attendance,
-
-                        title=title,
-
-                        message=message,
-
-                        notification_type="Attendance",
-                    )
-
-                    notifications_sent += 1
-
-                except Exception as notification_error:
-
-                    # Attendance should remain saved even
-                    # if notification creation fails.
-
-                    print(
-                        "Attendance notification error:",
-                        notification_error,
-                    )
+                print(
+                    "❌ Attendance notification error:",
+                    notification_error,
+                )
 
         # ====================================================
         # FINALIZE IMMEDIATELY
@@ -841,7 +1011,7 @@ class MarkAttendanceView(APIView):
         )
 
         # ====================================================
-        # RESPONSE
+        # FINAL RESPONSE
         # ====================================================
 
         return Response(
@@ -865,11 +1035,43 @@ class MarkAttendanceView(APIView):
                 "saved_records":
                     saved_records,
 
+                # --------------------------------------------
+                # Notification information
+                # --------------------------------------------
+
                 "notifications_sent":
                     notifications_sent,
 
                 "parent_notified":
                     notifications_sent > 0,
+
+                "parents_notified":
+                    parents_notified,
+
+                "students_without_parent":
+                    students_without_parent,
+
+                "notification_errors":
+                    notification_errors,
+
+                # --------------------------------------------
+                # Helpful summary
+                # --------------------------------------------
+
+                "notification_summary": {
+                    "sent":
+                        notifications_sent,
+
+                    "students_without_parent":
+                        len(
+                            students_without_parent
+                        ),
+
+                    "notification_errors":
+                        len(
+                            notification_errors
+                        ),
+                },
             },
 
             status=status.HTTP_200_OK,
@@ -879,11 +1081,11 @@ class MarkAttendanceView(APIView):
 # ============================================================
 # SUBMIT ATTENDANCE
 #
-# KEPT ONLY FOR BACKWARD COMPATIBILITY.
+# KEPT FOR BACKWARD COMPATIBILITY.
 #
-# The React application does NOT need to call this.
+# React DOES NOT need to call this.
 #
-# There is no approval workflow.
+# Attendance is finalized automatically when saved.
 # ============================================================
 
 class SubmitAttendanceView(APIView):
@@ -895,38 +1097,74 @@ class SubmitAttendanceView(APIView):
     @transaction.atomic
     def post(self, request):
 
-        serializer = (
-            CreateAttendanceSubmissionSerializer(
-                data=request.data
-            )
-        )
-
-        serializer.is_valid(
-            raise_exception=True
-        )
+        # ----------------------------------------------------
+        # Old endpoint is no longer needed.
+        # ----------------------------------------------------
 
         submission_id = (
-            serializer.validated_data.get(
+            request.data.get(
                 "submission"
             )
         )
 
-        # ----------------------------------------------------
-        # This serializer normally receives assignment,
-        # but old frontend may send submission.
-        # ----------------------------------------------------
-
-        if submission_id is None:
+        if not submission_id:
 
             return Response(
                 {
                     "error": (
                         "Attendance is saved directly "
                         "when marked. A separate submit "
-                        "step is no longer required."
+                        "step is not required."
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        submission = get_object_or_404(
+            AttendanceSubmission,
+            pk=submission_id,
+        )
+
+        # ----------------------------------------------------
+        # Verify teacher
+        # ----------------------------------------------------
+
+        teacher_profile = get_teacher_profile(
+            request
+        )
+
+        if not teacher_profile:
+
+            return Response(
+                {
+                    "error": (
+                        "Only teachers can access "
+                        "attendance."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # ----------------------------------------------------
+        # Verify assignment
+        # ----------------------------------------------------
+
+        assignment = submission.assignment
+
+        if (
+            not assignment
+            or assignment.teacher_id
+            != teacher_profile.id
+        ):
+
+            return Response(
+                {
+                    "error": (
+                        "This attendance submission "
+                        "does not belong to you."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         return Response(
@@ -938,7 +1176,10 @@ class SubmitAttendanceView(APIView):
                 ),
 
                 "submission":
-                    submission_id,
+                    submission.id,
+
+                "status":
+                    submission.status,
             },
 
             status=status.HTTP_200_OK,
