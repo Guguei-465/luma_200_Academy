@@ -7,17 +7,15 @@ def create_notification(
     message,
     notification_type,
     triggered_by=None,
+    attendance=None,
 ):
-    """
-    Create a notification for a single user.
-    """
-
     if recipient is None:
         raise ValueError("Recipient cannot be None.")
 
     return Notification.objects.create(
         recipient=recipient,
         triggered_by=triggered_by,
+        attendance=attendance,
         title=title,
         message=message,
         notification_type=notification_type,
@@ -31,10 +29,6 @@ def create_bulk_notifications(
     notification_type,
     triggered_by=None,
 ):
-    """
-    Create the same notification for multiple users.
-    """
-
     notifications = [
         Notification(
             recipient=user,
@@ -45,5 +39,4 @@ def create_bulk_notifications(
         )
         for user in recipients
     ]
-
     return Notification.objects.bulk_create(notifications)

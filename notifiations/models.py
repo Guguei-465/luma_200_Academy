@@ -25,22 +25,23 @@ class Notification(models.Model):
         related_name="triggered_notifications",
     )
 
+    attendance = models.ForeignKey(
+        "attendance.Attendance",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="notifications",
+    )
+
     notification_type = models.CharField(
         max_length=40,
         choices=NotificationType.choices,
     )
 
     title = models.CharField(max_length=200)
-
     message = models.TextField()
-
     is_read = models.BooleanField(default=False)
-
-    read_at = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
-
+    read_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

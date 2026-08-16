@@ -1,67 +1,24 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-
 from .views import (
+    TeacherProfileListView,
     TeacherAssignmentListView,
-    TeacherAssignmentDetailView,
     TeacherAssignmentCreateView,
+    TeacherAssignmentDetailView,
     TeacherAssignmentUpdateView,
     TeacherAssignmentDeleteView,
     TeacherProfileViewSet,
 )
 
-
 router = DefaultRouter()
-
-router.register(
-    r"teacher-profile",
-    TeacherProfileViewSet,
-    basename="teacher-profile"
-)
-
+router.register(r"my-profile", TeacherProfileViewSet, basename="my-profile")
 
 urlpatterns = [
-
-    # =================================================
-    # ASSIGNMENTS
-    # =================================================
-
-    path(
-        "",
-        TeacherAssignmentListView.as_view(),
-        name="assignment-list",
-    ),
-
-    path(
-        "create/",
-        TeacherAssignmentCreateView.as_view(),
-        name="assignment-create",
-    ),
-
-    path(
-        "<int:pk>/",
-        TeacherAssignmentDetailView.as_view(),
-        name="assignment-detail",
-    ),
-
-    path(
-        "update/<int:pk>/",
-        TeacherAssignmentUpdateView.as_view(),
-        name="assignment-update",
-    ),
-
-    path(
-        "delete/<int:pk>/",
-        TeacherAssignmentDeleteView.as_view(),
-        name="assignment-delete",
-    ),
-
-    # =================================================
-    # TEACHER PROFILE
-    # =================================================
-
-    path(
-        "",
-        include(router.urls),
-    ),
+    path("teachers/", TeacherProfileListView.as_view(), name="teacher-list"),  # ✅ Dropdown source
+    path("", TeacherAssignmentListView.as_view(), name="assignment-list"),
+    path("create/", TeacherAssignmentCreateView.as_view(), name="assignment-create"),
+    path("<int:pk>/", TeacherAssignmentDetailView.as_view(), name="assignment-detail"),
+    path("update/<int:pk>/", TeacherAssignmentUpdateView.as_view(), name="assignment-update"),
+    path("delete/<int:pk>/", TeacherAssignmentDeleteView.as_view(), name="assignment-delete"),
+    path("", include(router.urls)),
 ]
