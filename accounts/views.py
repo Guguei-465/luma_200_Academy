@@ -1,18 +1,18 @@
 from django.contrib.auth import authenticate
-from django.db import IntegrityError
-<<<<<<< HEAD
+from django.db import IntegrityError, transaction
 from django.db.models import Q
-=======
->>>>>>> origin/main
-from rest_framework.exceptions import NotFound
-from rest_framework import permissions, generics
+from django.shortcuts import get_object_or_404
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+
+from rest_framework import permissions, generics, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
+
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
-from django.db import transaction
-from django.shortcuts import get_object_or_404
+
 from accounts.serializers import (
     RegisterSerializer,
     StudentProfileSerializer,
@@ -22,6 +22,7 @@ from accounts.serializers import (
     AccountantProfileSerializer,
     AcademicCoordinatorProfileSerializer,
 )
+
 from .models import (
     CustomUser,
     ParentProfile,
@@ -30,41 +31,27 @@ from .models import (
     AccountantProfile,
     AcademicCoordinatorProfile,
 )
-<<<<<<< HEAD
-from students.models import Student
-=======
->>>>>>> origin/main
-from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError
 
- 
-<<<<<<< HEAD
-# NOTE: A STUDENT's login account gets a StudentProfile (basic bio,
-# same as every other role) via this mapping. Their CLASSROOM/PARENT
-# link lives on `students.Student.user` instead (see students app),
-# since that's the academic record the coordinator manages — but the
-# login-side StudentProfile below is still required, otherwise a
-# STUDENT-role account is created with literally no profile at all,
-# which is exactly the "some users have no profile" bug.
-=======
-# after deleting old model
-# NOTE: Student records are managed by the dedicated `students` app.
-# The `students.Student` model has no `user` FK, so it is intentionally
-# excluded from this role-based profile mapping.
->>>>>>> origin/main
+
+# ============================================================
+# PROFILE MODEL MAPPING
+# ============================================================
+
 PROFILE_MODELS = {
     CustomUser.Role.PARENT: ParentProfile,
     CustomUser.Role.TEACHER: TeacherProfile,
     CustomUser.Role.ACCOUNTANT: AccountantProfile,
     CustomUser.Role.ACADEMIC_COORDINATOR: AcademicCoordinatorProfile,
-<<<<<<< HEAD
     CustomUser.Role.STUDENT: StudentProfile,
-=======
->>>>>>> origin/main
 }
-# Reverse lookup for deleting old profiles
+
+# Reverse lookup for deleting old profiles when a user's role changes.
 PROFILE_MODELS_BY_ROLE = PROFILE_MODELS
 
+
+# ============================================================
+# LOGIN
+# ============================================================
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -75,21 +62,30 @@ def Login(request):
 
     if not username or not password:
         return Response(
-            {"error": "Username and password are required."},
+            {
+                "error": "Username and password are required."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    user = authenticate(username=username, password=password)
+    user = authenticate(
+        username=username,
+        password=password,
+    )
 
     if user is None:
         return Response(
-            {"error": "Invalid username or password."},
+            {
+                "error": "Invalid username or password."
+            },
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
     if not user.is_active:
         return Response(
-            {"error": "This account has been deactivated."},
+            {
+                "error": "This account has been deactivated."
+            },
             status=status.HTTP_403_FORBIDDEN,
         )
 
@@ -100,16 +96,20 @@ def Login(request):
             "message": "Login successful",
             "refresh": str(refresh),
             "access": str(refresh.access_token),
-            "user": UserSerializer(user).data
+            "user": UserSerializer(user).data,
         },
         status=status.HTTP_200_OK,
     )
 
 
-# Login test
+# ============================================================
+# LOGIN TEST
+# ============================================================
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def test(request):
+
     return Response(
         {
             "id": request.user.id,
@@ -120,7 +120,11 @@ def test(request):
         status=status.HTTP_200_OK,
     )
 
-# logout
+
+# ============================================================
+# LOGOUT
+# ============================================================
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def Logout(request):
@@ -129,7 +133,9 @@ def Logout(request):
 
     if not refresh_token:
         return Response(
-            {"error": "Refresh token is required."},
+            {
+                "error": "Refresh token is required."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -138,27 +144,42 @@ def Logout(request):
         token.blacklist()
 
         return Response(
-            {"message": "Logout successful."},
+            {
+                "message": "Logout successful."
+            },
             status=status.HTTP_200_OK,
         )
 
     except TokenError:
         return Response(
-            {"error": "Invalid or expired refresh token."},
+            {
+                "error": "Invalid or expired refresh token."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
 
-# Registration
+# ============================================================
+# REGISTRATION
+# ============================================================
+
 @api_view(["POST"])
 @transaction.atomic
 @permission_classes([IsAuthenticated])
 def Register(request):
 
+    # --------------------------------------------------------
     # Only Super Admin can create accounts
+    # --------------------------------------------------------
+
     if request.user.role != CustomUser.Role.SUPER_ADMIN:
         return Response(
-            {"error": "Only the Super Admin can create user accounts."},
+            {
+                "error": (
+                    "Only the Super Admin can create "
+                    "user accounts."
+                )
+            },
             status=status.HTTP_403_FORBIDDEN,
         )
 
@@ -168,79 +189,160 @@ def Register(request):
     role = request.data.get("role")
     phone_number = request.data.get("phone_number")
 
+    # --------------------------------------------------------
     # Required fields
+    # --------------------------------------------------------
+
     if not username or not email or not password or not role:
         return Response(
-            {"error": "Username, email, password and role are required."},
+            {
+                "error": (
+                    "Username, email, password and role "
+                    "are required."
+                )
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # --------------------------------------------------------
     # Check username
-    if CustomUser.objects.filter(username=username).exists():
+    # --------------------------------------------------------
+
+    if CustomUser.objects.filter(
+        username=username
+    ).exists():
         return Response(
-            {"error": "Username already exists."},
+            {
+                "error": "Username already exists."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # --------------------------------------------------------
     # Check email
-    if CustomUser.objects.filter(email=email).exists():
+    # --------------------------------------------------------
+
+    if CustomUser.objects.filter(
+        email=email
+    ).exists():
         return Response(
-            {"error": "Email already exists."},
+            {
+                "error": "Email already exists."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     try:
-        serializer = RegisterSerializer(data=request.data)
+        serializer = RegisterSerializer(
+            data=request.data
+        )
 
         if serializer.is_valid():
 
             user = serializer.save()
 
+            # ------------------------------------------------
+            # TEACHER
+            # ------------------------------------------------
+
             if user.role == CustomUser.Role.TEACHER:
+
                 TeacherProfile.objects.create(
                     user=user,
-                    employee_number=request.data.get("employee_number"),
-                    national_id=request.data.get("national_id"),
-                    gender=request.data.get("gender"),
-                    date_of_birth=request.data.get("date_of_birth"),
-                    qualification=request.data.get("qualification"),
-                    employment_date=request.data.get("employment_date"),
+                    employee_number=request.data.get(
+                        "employee_number"
+                    ),
+                    national_id=request.data.get(
+                        "national_id"
+                    ),
+                    gender=request.data.get(
+                        "gender"
+                    ),
+                    date_of_birth=request.data.get(
+                        "date_of_birth"
+                    ),
+                    qualification=request.data.get(
+                        "qualification"
+                    ),
+                    employment_date=request.data.get(
+                        "employment_date"
+                    ),
                 )
+
+            # ------------------------------------------------
+            # PARENT
+            # ------------------------------------------------
 
             elif user.role == CustomUser.Role.PARENT:
+
                 ParentProfile.objects.create(
                     user=user,
-                    occupation=request.data.get("occupation", ""),
-                    address=request.data.get("address", ""),
+                    occupation=request.data.get(
+                        "occupation",
+                        "",
+                    ),
+                    address=request.data.get(
+                        "address",
+                        "",
+                    ),
                 )
+
+            # ------------------------------------------------
+            # ACCOUNTANT
+            # ------------------------------------------------
 
             elif user.role == CustomUser.Role.ACCOUNTANT:
+
                 AccountantProfile.objects.create(
                     user=user,
-                    employee_number=request.data.get("employee_number"),
+                    employee_number=request.data.get(
+                        "employee_number"
+                    ),
                 )
 
-            elif user.role == CustomUser.Role.ACADEMIC_COORDINATOR:
+            # ------------------------------------------------
+            # ACADEMIC COORDINATOR
+            # ------------------------------------------------
+
+            elif (
+                user.role
+                == CustomUser.Role.ACADEMIC_COORDINATOR
+            ):
+
                 AcademicCoordinatorProfile.objects.create(
                     user=user,
-                    employee_number=request.data.get("employee_number"),
+                    employee_number=request.data.get(
+                        "employee_number"
+                    ),
                 )
 
-<<<<<<< HEAD
+            # ------------------------------------------------
+            # STUDENT
+            # ------------------------------------------------
+
             elif user.role == CustomUser.Role.STUDENT:
+
                 StudentProfile.objects.create(
                     user=user,
-                    admission_number=request.data.get("admission_number"),
-                    national_id=request.data.get("national_id") or None,
-                    gender=request.data.get("gender"),
-                    date_of_birth=request.data.get("date_of_birth"),
+                    admission_number=request.data.get(
+                        "admission_number"
+                    ),
+                    national_id=request.data.get(
+                        "national_id"
+                    ) or None,
+                    gender=request.data.get(
+                        "gender"
+                    ),
+                    date_of_birth=request.data.get(
+                        "date_of_birth"
+                    ),
                 )
 
-=======
->>>>>>> origin/main
             return Response(
                 {
-                    "message": "User account created successfully.",
+                    "message": (
+                        "User account created successfully."
+                    ),
                     "user": serializer.data,
                 },
                 status=status.HTTP_201_CREATED,
@@ -252,6 +354,7 @@ def Register(request):
         )
 
     except IntegrityError as e:
+
         return Response(
             {
                 "error": str(e)
@@ -260,39 +363,48 @@ def Register(request):
         )
 
 
-# List all users
+# ============================================================
+# LIST ALL USERS
+# ============================================================
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def UserList(request):
 
     if request.user.role != CustomUser.Role.SUPER_ADMIN:
         return Response(
-            {"error": "Only the Super Admin can view all users."},
+            {
+                "error": (
+                    "Only the Super Admin can view "
+                    "all users."
+                )
+            },
             status=status.HTTP_403_FORBIDDEN,
         )
 
     users = CustomUser.objects.order_by("id")
 
-<<<<<<< HEAD
-    # =============================================
-    # QUERY-PARAM FILTERS
+    # ========================================================
+    # QUERY PARAMETER FILTERS
     #
-    # ?role=TEACHER, ?is_active=true, ?search=name/email/username
-    # Previously this endpoint ignored every query param, so the
-    # frontend's role/search filters silently did nothing and had
-    # to filter client-side after fetching the whole user table.
-    # =============================================
+    # ?role=TEACHER
+    # ?is_active=true
+    # ?search=name/email/username
+    # ========================================================
 
     role = request.query_params.get("role")
     is_active = request.query_params.get("is_active")
     search = request.query_params.get("search")
 
     if role:
-        users = users.filter(role=role.upper())
+        users = users.filter(
+            role=role.upper()
+        )
 
     if is_active is not None:
         users = users.filter(
-            is_active=is_active.lower() in ["true", "1", "yes"]
+            is_active=is_active.lower()
+            in ["true", "1", "yes"]
         )
 
     if search:
@@ -304,76 +416,151 @@ def UserList(request):
             | Q(phone_number__icontains=search)
         )
 
-=======
->>>>>>> origin/main
-    serializer = UserSerializer(users, many=True)
-    return Response(serializer.data)
+    serializer = UserSerializer(
+        users,
+        many=True,
+    )
+
+    return Response(
+        serializer.data,
+        status=status.HTTP_200_OK,
+    )
 
 
-# User details
+# ============================================================
+# USER DETAILS
+# ============================================================
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def UserDetail(request, id):
 
     if request.user.role != CustomUser.Role.SUPER_ADMIN:
         return Response(
-            {"error": "Only the Super Admin can view user details."},
+            {
+                "error": (
+                    "Only the Super Admin can view "
+                    "user details."
+                )
+            },
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    try:
-        user = get_object_or_404(CustomUser, id=id)
-
-    except CustomUser.DoesNotExist:
-        return Response(
-            {"error": "User not found."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+    user = get_object_or_404(
+        CustomUser,
+        id=id,
+    )
 
     serializer = UserSerializer(user)
 
-    return Response(serializer.data)
+    return Response(
+        serializer.data,
+        status=status.HTTP_200_OK,
+    )
 
 
+# ============================================================
+# UPDATE USER
+# ============================================================
 
-# updating users
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
+@transaction.atomic
 def UpdateUser(request, id):
+
+    # --------------------------------------------------------
     # Only Super Admin can update users
+    # --------------------------------------------------------
+
     if request.user.role != CustomUser.Role.SUPER_ADMIN:
         return Response(
-            {"error": "Only the Super Admin can update user accounts."},
+            {
+                "error": (
+                    "Only the Super Admin can update "
+                    "user accounts."
+                )
+            },
             status=status.HTTP_403_FORBIDDEN,
         )
 
     try:
         user = CustomUser.objects.get(id=id)
+
     except CustomUser.DoesNotExist:
+
         return Response(
-            {"error": "User not found."},
+            {
+                "error": "User not found."
+            },
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    username = request.data.get("username", user.username)
-    first_name = request.data.get("first_name", user.first_name)
-    last_name = request.data.get("last_name", user.last_name)
-    email = request.data.get("email", user.email)
-    phone_number = request.data.get("phone_number", user.phone_number)
-    role = request.data.get("role", user.role)
-    is_active = request.data.get("is_active", user.is_active)
+    username = request.data.get(
+        "username",
+        user.username,
+    )
 
+    first_name = request.data.get(
+        "first_name",
+        user.first_name,
+    )
+
+    last_name = request.data.get(
+        "last_name",
+        user.last_name,
+    )
+
+    email = request.data.get(
+        "email",
+        user.email,
+    )
+
+    phone_number = request.data.get(
+        "phone_number",
+        user.phone_number,
+    )
+
+    role = request.data.get(
+        "role",
+        user.role,
+    )
+
+    is_active = request.data.get(
+        "is_active",
+        user.is_active,
+    )
+
+    # --------------------------------------------------------
     # Check username uniqueness
-    if CustomUser.objects.exclude(id=user.id).filter(username=username).exists():
+    # --------------------------------------------------------
+
+    if (
+        CustomUser.objects
+        .exclude(id=user.id)
+        .filter(username=username)
+        .exists()
+    ):
         return Response(
-            {"error": "Username already exists."},
+            {
+                "error": "Username already exists."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # --------------------------------------------------------
     # Check email uniqueness
-    if CustomUser.objects.exclude(id=user.id).filter(email=email).exists():
+    # --------------------------------------------------------
+
+    if (
+        CustomUser.objects
+        .exclude(id=user.id)
+        .filter(email=email)
+        .exists()
+    ):
         return Response(
-            {"error": "Email already exists."},
+            {
+                "error": "Email already exists."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -386,50 +573,62 @@ def UpdateUser(request, id):
     user.phone_number = phone_number
     user.role = role
     user.is_active = is_active
+
     user.save()
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-    # If the role changed, remove the old profile and create the new one.
-    #
-    # NOTE: TeacherProfile / AccountantProfile / AcademicCoordinatorProfile
-    # all have required fields (employee_number, national_id, gender,
-    # date_of_birth, etc.) with no defaults, so a bare
-    # get_or_create(user=user) will raise IntegrityError for those roles.
-    # We no longer let that crash the request (500) — instead we tell the
-    # caller the new profile still needs its required details filled in.
+    # ========================================================
+    # ROLE CHANGE
+    # ========================================================
+
     profile_warning = None
 
-<<<<<<< HEAD
-=======
-=======
-    # If the role changed, remove the old profile and create the new one
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
     if old_role != role:
-        old_profile_model = PROFILE_MODELS_BY_ROLE.get(old_role)
+
+        # ----------------------------------------------------
+        # Remove old profile
+        # ----------------------------------------------------
+
+        old_profile_model = PROFILE_MODELS_BY_ROLE.get(
+            old_role
+        )
 
         if old_profile_model:
-            old_profile_model.objects.filter(user=user).delete()
+            old_profile_model.objects.filter(
+                user=user
+            ).delete()
 
-        new_profile_model = PROFILE_MODELS_BY_ROLE.get(role)
+        # ----------------------------------------------------
+        # Create new profile
+        # ----------------------------------------------------
+
+        new_profile_model = PROFILE_MODELS_BY_ROLE.get(
+            role
+        )
 
         if new_profile_model:
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
+
+            # Use a nested transaction so that an IntegrityError
+            # here does not break the outer atomic transaction.
             try:
-                new_profile_model.objects.get_or_create(user=user)
+                with transaction.atomic():
+                    new_profile_model.objects.get_or_create(
+                        user=user
+                    )
+
             except IntegrityError:
+
                 profile_warning = (
-                    f"User role changed to {role}, but the matching "
-                    f"profile could not be auto-created because required "
-                    f"fields are missing. Please complete the "
-                    f"{new_profile_model.__name__} details for this user."
+                    f"User role changed to {role}, but the "
+                    f"matching profile could not be "
+                    f"auto-created because required fields "
+                    f"are missing. Please complete the "
+                    f"{new_profile_model.__name__} details "
+                    f"for this user."
                 )
+
+    # ========================================================
+    # RESPONSE
+    # ========================================================
 
     response_data = {
         "message": "User updated successfully.",
@@ -450,55 +649,45 @@ def UpdateUser(request, id):
 
     return Response(
         response_data,
-<<<<<<< HEAD
-=======
-=======
-            new_profile_model.objects.get_or_create(user=user)
-
-    return Response(
-        {
-            "message": "User updated successfully.",
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "email": user.email,
-                "phone_number": user.phone_number,
-                "role": user.role,
-                "is_active": user.is_active,
-            },
-        },
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
         status=status.HTTP_200_OK,
     )
 
 
-# deletin/deativate user
+# ============================================================
+# DELETE / DEACTIVATE USER
+# ============================================================
+
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def DeleteUser(request, id):
-    # Only Super Admin can deactivate users
+
     if request.user.role != CustomUser.Role.SUPER_ADMIN:
         return Response(
-            {"error": "Only the Super Admin can deactivate user accounts."},
+            {
+                "error": (
+                    "Only the Super Admin can deactivate "
+                    "user accounts."
+                )
+            },
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    try:
-        user = get_object_or_404(CustomUser, id=id)
+    user = get_object_or_404(
+        CustomUser,
+        id=id,
+    )
 
-    except CustomUser.DoesNotExist:
-        return Response(
-            {"error": "User not found."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
+    # --------------------------------------------------------
     # Prevent deleting yourself
+    # --------------------------------------------------------
+
     if user.id == request.user.id:
         return Response(
-            {"error": "You cannot deactivate your own account."},
+            {
+                "error": (
+                    "You cannot deactivate your own account."
+                )
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -507,242 +696,453 @@ def DeleteUser(request, id):
 
     return Response(
         {
-            "message": "User account has been deactivated successfully."
+            "message": (
+                "User account has been deactivated "
+                "successfully."
+            )
         },
         status=status.HTTP_200_OK,
     )
 
-# restoring deactivated user
+
+# ============================================================
+# RESTORE DEACTIVATED USER
+# ============================================================
+
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def RestoreUser(request, id):
-    #  only admin can do that
+
     if request.user.role != CustomUser.Role.SUPER_ADMIN:
         return Response(
-            {"error": "Only the Super Admin can restore user accounts."},
+            {
+                "error": (
+                    "Only the Super Admin can restore "
+                    "user accounts."
+                )
+            },
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    try:
-        user = get_object_or_404(CustomUser, id=id)
-
-    except CustomUser.DoesNotExist:
-        return Response(
-            {"error": "User not found."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+    user = get_object_or_404(
+        CustomUser,
+        id=id,
+    )
 
     user.is_active = True
     user.save()
 
     return Response(
         {
-            "message": "User account restored successfully."
+            "message": (
+                "User account restored successfully."
+            )
         },
         status=status.HTTP_200_OK,
     )
- 
-# changing passord
+
+
+# ============================================================
+# CHANGE PASSWORD
+# ============================================================
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def ChangePassword(request):
-    # anyone can chang his/her password
+
     user = request.user
 
-    old_password = request.data.get("old_password")
-    new_password = request.data.get("new_password")
-    confirm_password = request.data.get("confirm_password")
+    old_password = request.data.get(
+        "old_password"
+    )
 
+    new_password = request.data.get(
+        "new_password"
+    )
+
+    confirm_password = request.data.get(
+        "confirm_password"
+    )
+
+    # --------------------------------------------------------
     # Required fields
-    if not old_password or not new_password or not confirm_password:
+    # --------------------------------------------------------
+
+    if (
+        not old_password
+        or not new_password
+        or not confirm_password
+    ):
         return Response(
             {
-                "error": "Old password, new password and confirm password are required."
+                "error": (
+                    "Old password, new password and "
+                    "confirm password are required."
+                )
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # --------------------------------------------------------
     # Check old password
+    # --------------------------------------------------------
+
     if not user.check_password(old_password):
+
         return Response(
-            {"error": "Old password is incorrect."},
+            {
+                "error": "Old password is incorrect."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Check new password confirmation
+    # --------------------------------------------------------
+    # Check confirmation
+    # --------------------------------------------------------
+
     if new_password != confirm_password:
+
         return Response(
-            {"error": "New passwords do not match."},
+            {
+                "error": "New passwords do not match."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Prevent reusing the same password
+    # --------------------------------------------------------
+    # Prevent password reuse
+    # --------------------------------------------------------
+
     if user.check_password(new_password):
+
         return Response(
-            {"error": "New password must be different from the old password."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    try:
-       validate_password(new_password, user)
-    except ValidationError as e:
-      return Response(
-        {"error": e.messages},
-        status=status.HTTP_400_BAD_REQUEST,
-    )
-
-    # Save the new password
-    user.set_password(new_password)
-    user.save()
-
-    return Response(
-        {"message": "Password changed successfully."},
-        status=status.HTTP_200_OK,
-    )
-
-# reset passwword
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def ResetPassword(request, id):
-    # Only Super Admin can reset passwords
-    if request.user.role != CustomUser.Role.SUPER_ADMIN:
-        return Response(
-            {"error": "Only the Super Admin can reset user passwords."},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    try:
-        user = get_object_or_404(CustomUser, id=id)
-    except CustomUser.DoesNotExist:
-        return Response(
-            {"error": "User not found."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    new_password = request.data.get("new_password")
-    confirm_password = request.data.get("confirm_password")
-
-    # Required fields
-    if not new_password or not confirm_password:
-        return Response(
-            {"error": "New password and confirm password are required."},
+            {
+                "error": (
+                    "New password must be different "
+                    "from the old password."
+                )
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Passwords must match
-    if new_password != confirm_password:
-        return Response(
-            {"error": "Passwords do not match."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Don't reuse the current password
-    if user.check_password(new_password):
-        return Response(
-            {"error": "The new password cannot be the same as the current password."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
+    # --------------------------------------------------------
     # Validate password
+    # --------------------------------------------------------
+
     try:
-        validate_password(new_password, user)
+
+        validate_password(
+            new_password,
+            user,
+        )
+
     except ValidationError as e:
+
         return Response(
-            {"error": e.messages},
+            {
+                "error": e.messages
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # --------------------------------------------------------
     # Save password
+    # --------------------------------------------------------
+
     user.set_password(new_password)
     user.save()
 
     return Response(
         {
-            "message": f"Password for '{user.username}' has been reset successfully."
+            "message": (
+                "Password changed successfully."
+            )
         },
         status=status.HTTP_200_OK,
     )
 
 
-class AcademicCoordinatorProfileView(generics.RetrieveUpdateAPIView):
+# ============================================================
+# RESET USER PASSWORD
+# ============================================================
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def ResetPassword(request, id):
+
+    # --------------------------------------------------------
+    # Only Super Admin can reset passwords
+    # --------------------------------------------------------
+
+    if request.user.role != CustomUser.Role.SUPER_ADMIN:
+        return Response(
+            {
+                "error": (
+                    "Only the Super Admin can reset "
+                    "user passwords."
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    user = get_object_or_404(
+        CustomUser,
+        id=id,
+    )
+
+    new_password = request.data.get(
+        "new_password"
+    )
+
+    confirm_password = request.data.get(
+        "confirm_password"
+    )
+
+    # --------------------------------------------------------
+    # Required fields
+    # --------------------------------------------------------
+
+    if not new_password or not confirm_password:
+
+        return Response(
+            {
+                "error": (
+                    "New password and confirm password "
+                    "are required."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # --------------------------------------------------------
+    # Check confirmation
+    # --------------------------------------------------------
+
+    if new_password != confirm_password:
+
+        return Response(
+            {
+                "error": "Passwords do not match."
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # --------------------------------------------------------
+    # Prevent reuse
+    # --------------------------------------------------------
+
+    if user.check_password(new_password):
+
+        return Response(
+            {
+                "error": (
+                    "The new password cannot be the same "
+                    "as the current password."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # --------------------------------------------------------
+    # Validate password
+    # --------------------------------------------------------
+
+    try:
+
+        validate_password(
+            new_password,
+            user,
+        )
+
+    except ValidationError as e:
+
+        return Response(
+            {
+                "error": e.messages
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # --------------------------------------------------------
+    # Save password
+    # --------------------------------------------------------
+
+    user.set_password(new_password)
+    user.save()
+
+    return Response(
+        {
+            "message": (
+                f"Password for '{user.username}' "
+                "has been reset successfully."
+            )
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+# ============================================================
+# ACADEMIC COORDINATOR PROFILE
+# ============================================================
+
+class AcademicCoordinatorProfileView(
+    generics.RetrieveUpdateAPIView
+):
+
     serializer_class = AcademicCoordinatorProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    permission_classes = [
+        permissions.IsAuthenticated
+    ]
 
     def get_object(self):
-        instance = AcademicCoordinatorProfile.objects.filter(
-            user=self.request.user
-        ).first()
+
+        instance = (
+            AcademicCoordinatorProfile.objects
+            .filter(user=self.request.user)
+            .first()
+        )
+
         if instance is None:
-            raise NotFound("Academic coordinator profile not found.")
+            raise NotFound(
+                "Academic coordinator profile not found."
+            )
+
         return instance
 
 
-class TeacherProfileView(generics.RetrieveUpdateAPIView):
+# ============================================================
+# TEACHER PROFILE
+# ============================================================
+
+class TeacherProfileView(
+    generics.RetrieveUpdateAPIView
+):
+
     serializer_class = TeacherProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    permission_classes = [
+        permissions.IsAuthenticated
+    ]
 
     def get_object(self):
-        instance = TeacherProfile.objects.filter(
-            user=self.request.user
-        ).first()
+
+        instance = (
+            TeacherProfile.objects
+            .filter(user=self.request.user)
+            .first()
+        )
+
         if instance is None:
-            raise NotFound("Teacher profile not found.")
+            raise NotFound(
+                "Teacher profile not found."
+            )
+
         return instance
 
 
-class AccountantProfileView(generics.RetrieveUpdateAPIView):
+# ============================================================
+# ACCOUNTANT PROFILE
+# ============================================================
+
+class AccountantProfileView(
+    generics.RetrieveUpdateAPIView
+):
+
     serializer_class = AccountantProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    permission_classes = [
+        permissions.IsAuthenticated
+    ]
 
     def get_object(self):
-        instance = AccountantProfile.objects.filter(
-            user=self.request.user
-        ).first()
+
+        instance = (
+            AccountantProfile.objects
+            .filter(user=self.request.user)
+            .first()
+        )
+
         if instance is None:
-            raise NotFound("Accountant profile not found.")
+            raise NotFound(
+                "Accountant profile not found."
+            )
+
         return instance
 
 
-class ParentProfileView(generics.RetrieveUpdateAPIView):
+# ============================================================
+# PARENT PROFILE
+# ============================================================
+
+class ParentProfileView(
+    generics.RetrieveUpdateAPIView
+):
+
     serializer_class = ParentProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    permission_classes = [
+        permissions.IsAuthenticated
+    ]
 
     def get_object(self):
-        instance = ParentProfile.objects.filter(
-            user=self.request.user
-        ).first()
+
+        instance = (
+            ParentProfile.objects
+            .filter(user=self.request.user)
+            .first()
+        )
+
         if instance is None:
-            raise NotFound("Parent profile not found.")
+            raise NotFound(
+                "Parent profile not found."
+            )
+
         return instance
 
 
-class StudentProfileView(generics.RetrieveUpdateAPIView):
+# ============================================================
+# STUDENT PROFILE
+# ============================================================
+
+class StudentProfileView(
+    generics.RetrieveUpdateAPIView
+):
+
     serializer_class = StudentProfileSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    permission_classes = [
+        permissions.IsAuthenticated
+    ]
 
     def get_object(self):
+
         try:
-            return StudentProfile.objects.get(user=self.request.user)
+
+            return StudentProfile.objects.get(
+                user=self.request.user
+            )
+
         except StudentProfile.DoesNotExist:
-            raise NotFound("Student profile not found.")
+
+            raise NotFound(
+                "Student profile not found."
+            )
 
 
-# ==========================================
+# ============================================================
 # LIST ALL PARENTS
-# ==========================================
+# ============================================================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def ParentList(request):
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-    # Only staff roles that legitimately need the full parent/child
-    # roster may see it. Without this check, ANY authenticated user
-    # (including a Parent or Teacher) could list every family's data,
-    # which breaks the parent-isolation principle even though this
-    # isn't itself a "parent-scoped" endpoint.
+    # --------------------------------------------------------
+    # Only staff roles that legitimately need the complete
+    # parent/child roster may access this endpoint.
+    # --------------------------------------------------------
+
     allowed_roles = [
         CustomUser.Role.SUPER_ADMIN,
         CustomUser.Role.ACADEMIC_COORDINATOR,
@@ -750,64 +1150,73 @@ def ParentList(request):
     ]
 
     if request.user.role not in allowed_roles:
+
         return Response(
-            {"error": "You do not have permission to view the parent list."},
+            {
+                "error": (
+                    "You do not have permission "
+                    "to view the parent list."
+                )
+            },
             status=status.HTTP_403_FORBIDDEN,
         )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
     parents = (
         ParentProfile.objects
         .select_related("user")
         .prefetch_related("children")
-        .order_by("user__first_name", "user__last_name")
+        .order_by(
+            "user__first_name",
+            "user__last_name",
+        )
     )
 
-<<<<<<< HEAD
-    # =============================================
-    # QUERY-PARAM FILTERS: ?search=name/phone/email
-    # =============================================
+    # ========================================================
+    # QUERY PARAMETER SEARCH
+    #
+    # ?search=name/phone/email
+    # ========================================================
 
-    search = request.query_params.get("search")
+    search = request.query_params.get(
+        "search"
+    )
 
     if search:
+
         parents = parents.filter(
-            Q(user__first_name__icontains=search)
-            | Q(user__last_name__icontains=search)
-            | Q(user__phone_number__icontains=search)
-            | Q(user__email__icontains=search)
+            Q(
+                user__first_name__icontains=search
+            )
+            | Q(
+                user__last_name__icontains=search
+            )
+            | Q(
+                user__phone_number__icontains=search
+            )
+            | Q(
+                user__email__icontains=search
+            )
         )
 
-=======
->>>>>>> origin/main
     serializer = ParentProfileSerializer(
         parents,
-        many=True
+        many=True,
     )
 
     return Response(
         serializer.data,
-        status=status.HTTP_200_OK
+        status=status.HTTP_200_OK,
     )
+
 
 # ============================================================
 # LIST ALL TEACHER PROFILES
 # ============================================================
 #
-# This endpoint is different from TeacherProfileView.
-#
 # TeacherProfileView:
-#     /api/accounts/teacher-profile/
-#
-#     Returns ONLY the logged-in teacher's own profile.
+#     Returns ONLY the logged-in teacher's profile.
 #
 # TeacherProfilesListView:
-#     /api/accounts/teacher-profiles/
-#
 #     Returns ALL registered teacher profiles.
 #
 # Used by:
@@ -816,7 +1225,9 @@ def ParentList(request):
 #
 # ============================================================
 
-class TeacherProfilesListView(generics.ListAPIView):
+class TeacherProfilesListView(
+    generics.ListAPIView
+):
 
     serializer_class = TeacherProfileSerializer
 
@@ -837,14 +1248,11 @@ class TeacherProfilesListView(generics.ListAPIView):
         ]
 
         if self.request.user.role not in allowed_roles:
+
             return TeacherProfile.objects.none()
 
         # ----------------------------------------------------
-        # Return ALL teacher profiles.
-        #
-        # select_related("user") makes sure user information
-        # such as first_name, last_name, email, username etc.
-        # can be serialized efficiently.
+        # Return all teacher profiles.
         # ----------------------------------------------------
 
         return (
@@ -855,34 +1263,50 @@ class TeacherProfilesListView(generics.ListAPIView):
                 "user__last_name",
                 "id",
             )
-<<<<<<< HEAD
         )
 
-    # =============================================
-    # QUERY-PARAM FILTERS
+    # ========================================================
+    # QUERY PARAMETER FILTERS
     #
-    # ?search=name/employee_number, ?gender=Male/Female
-    # =============================================
+    # ?search=name/employee_number
+    # ?gender=Male/Female
+    # ========================================================
 
     def filter_queryset(self, queryset):
 
-        queryset = super().filter_queryset(queryset)
+        queryset = super().filter_queryset(
+            queryset
+        )
 
-        search = self.request.query_params.get("search")
-        gender = self.request.query_params.get("gender")
+        search = self.request.query_params.get(
+            "search"
+        )
+
+        gender = self.request.query_params.get(
+            "gender"
+        )
 
         if search:
+
             queryset = queryset.filter(
-                Q(user__first_name__icontains=search)
-                | Q(user__last_name__icontains=search)
-                | Q(employee_number__icontains=search)
-                | Q(user__username__icontains=search)
+                Q(
+                    user__first_name__icontains=search
+                )
+                | Q(
+                    user__last_name__icontains=search
+                )
+                | Q(
+                    employee_number__icontains=search
+                )
+                | Q(
+                    user__username__icontains=search
+                )
             )
 
         if gender:
-            queryset = queryset.filter(gender=gender)
+
+            queryset = queryset.filter(
+                gender=gender
+            )
 
         return queryset
-=======
-        )
->>>>>>> origin/main

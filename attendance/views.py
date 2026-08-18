@@ -2,11 +2,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
-<<<<<<< HEAD
 from rest_framework.permissions import IsAuthenticated
-
-=======
->>>>>>> origin/main
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,14 +10,7 @@ from rest_framework.views import APIView
 from accounts.models import (
     CustomUser,
     TeacherProfile,
-<<<<<<< HEAD
     ParentProfile,
-=======
-<<<<<<< HEAD
-    ParentProfile,
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 )
 
 from assignments.models import TeacherAssignment
@@ -71,19 +60,13 @@ def get_teacher_profile(request):
 # HELPER — VERIFY CLASS TEACHER ASSIGNMENT
 # ============================================================
 
-def verify_class_teacher(
-    request,
-    assignment,
-):
+def verify_class_teacher(request, assignment):
     """
     Verify that:
 
-<<<<<<< HEAD
     1. Logged-in user is a teacher who owns this assignment
        as an active class teacher — OR the user is a Super
-       Admin / Academic Coordinator (who may act on behalf
-       of any class, since IsAssignedClassTeacher already
-       grants them endpoint-level access).
+       Admin / Academic Coordinator.
     2. Assignment is active.
     """
 
@@ -91,15 +74,6 @@ def verify_class_teacher(
 
     # --------------------------------------------------------
     # ADMIN / COORDINATOR OVERRIDE
-    #
-    # These roles are already let through by
-    # IsAssignedClassTeacher.has_permission(); previously this
-    # function still required request.user.teacher_profile to
-    # exist, which admins/coordinators never have — so every
-    # admin/coordinator attendance request 403'd anyway despite
-    # having "permission". They don't own a TeacherAssignment,
-    # so they're only checked against the assignment being
-    # active, not ownership/class-teacher status.
     # --------------------------------------------------------
 
     if user.role in [
@@ -121,19 +95,12 @@ def verify_class_teacher(
                 ),
             )
 
-        return (
-            None,
-            None,
-        )
+        return None, None
 
-=======
-    1. Logged-in user is a teacher.
-    2. Teacher owns the assignment.
-    3. Assignment is marked as Class Teacher.
-    4. Assignment is active.
-    """
+    # --------------------------------------------------------
+    # TEACHER PROFILE
+    # --------------------------------------------------------
 
->>>>>>> origin/main
     teacher_profile = get_teacher_profile(request)
 
     if not teacher_profile:
@@ -204,10 +171,7 @@ def verify_class_teacher(
             ),
         )
 
-    return (
-        teacher_profile,
-        None,
-    )
+    return teacher_profile, None
 
 
 # ============================================================
@@ -235,10 +199,6 @@ class AttendanceSubmissionCreateView(APIView):
             "assignment"
         ]
 
-        # ----------------------------------------------------
-        # Get assignment
-        # ----------------------------------------------------
-
         assignment = get_object_or_404(
             TeacherAssignment.objects.select_related(
                 "teacher",
@@ -247,10 +207,6 @@ class AttendanceSubmissionCreateView(APIView):
             ),
             pk=assignment_id,
         )
-
-        # ----------------------------------------------------
-        # Verify class teacher
-        # ----------------------------------------------------
 
         (
             teacher_profile,
@@ -263,15 +219,7 @@ class AttendanceSubmissionCreateView(APIView):
         if error_response:
             return error_response
 
-        # ----------------------------------------------------
-        # Today's date
-        # ----------------------------------------------------
-
         today = timezone.localdate()
-
-        # ----------------------------------------------------
-        # Get/create today's attendance session
-        # ----------------------------------------------------
 
         submission, created = (
             AttendanceSubmission.objects.get_or_create(
@@ -290,10 +238,6 @@ class AttendanceSubmissionCreateView(APIView):
             )
         )
 
-        # ----------------------------------------------------
-        # Protect classroom relationship
-        # ----------------------------------------------------
-
         if submission.classroom_id != assignment.classroom_id:
 
             submission.classroom = assignment.classroom
@@ -304,16 +248,10 @@ class AttendanceSubmissionCreateView(APIView):
                 ]
             )
 
-        # ----------------------------------------------------
-        # Response
-        # ----------------------------------------------------
-
         return Response(
             {
                 "submission": submission.id,
-
                 "created": created,
-
                 "assignment": assignment.id,
 
                 "classroom": str(
@@ -375,16 +313,10 @@ class MarkAttendanceView(APIView):
 
             return Response(
                 {
-                    "error": (
-                        "Assignment is required."
-                    )
+                    "error": "Assignment is required."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        # ----------------------------------------------------
-        # Assignment
-        # ----------------------------------------------------
 
         assignment = get_object_or_404(
             TeacherAssignment.objects.select_related(
@@ -394,10 +326,6 @@ class MarkAttendanceView(APIView):
             ),
             pk=assignment_id,
         )
-
-        # ----------------------------------------------------
-        # Verify teacher/class teacher
-        # ----------------------------------------------------
 
         (
             teacher_profile,
@@ -410,15 +338,7 @@ class MarkAttendanceView(APIView):
         if error_response:
             return error_response
 
-        # ----------------------------------------------------
-        # Today's date
-        # ----------------------------------------------------
-
         today = timezone.localdate()
-
-        # ----------------------------------------------------
-        # Get/create submission
-        # ----------------------------------------------------
 
         submission, created = (
             AttendanceSubmission.objects.get_or_create(
@@ -435,10 +355,6 @@ class MarkAttendanceView(APIView):
                 },
             )
         )
-
-        # ----------------------------------------------------
-        # Get students
-        # ----------------------------------------------------
 
         students = (
             Student.objects
@@ -474,8 +390,7 @@ class MarkAttendanceView(APIView):
 
             records.append(
                 {
-                    "id":
-                        attendance.id,
+                    "id": attendance.id,
 
                     "student":
                         student.id,
@@ -495,10 +410,6 @@ class MarkAttendanceView(APIView):
                         attendance.remarks or "",
                 }
             )
-
-        # ----------------------------------------------------
-        # Response
-        # ----------------------------------------------------
 
         return Response(
             {
@@ -567,10 +478,6 @@ class MarkAttendanceView(APIView):
             raise_exception=True
         )
 
-        # ----------------------------------------------------
-        # Get submission
-        # ----------------------------------------------------
-
         submission = get_object_or_404(
 
             AttendanceSubmission.objects
@@ -588,14 +495,7 @@ class MarkAttendanceView(APIView):
         )
 
         # ----------------------------------------------------
-<<<<<<< HEAD
-        # Teacher / Admin / Coordinator
-        #
-        # Same override as verify_class_teacher(): admins and
-        # coordinators are allowed by IsAssignedClassTeacher at
-        # the endpoint level, so they must not be rejected here
-        # just because they have no TeacherAssignment of their
-        # own.
+        # Admin / Coordinator override
         # ----------------------------------------------------
 
         is_admin_or_coordinator = request.user.role in [
@@ -603,20 +503,11 @@ class MarkAttendanceView(APIView):
             CustomUser.Role.ACADEMIC_COORDINATOR,
         ]
 
-=======
-        # Teacher
-        # ----------------------------------------------------
-
->>>>>>> origin/main
         teacher_profile = get_teacher_profile(
             request
         )
 
-<<<<<<< HEAD
         if not teacher_profile and not is_admin_or_coordinator:
-=======
-        if not teacher_profile:
->>>>>>> origin/main
 
             return Response(
                 {
@@ -647,10 +538,7 @@ class MarkAttendanceView(APIView):
             )
 
         # ----------------------------------------------------
-<<<<<<< HEAD
-        # Teacher owns assignment / must be class teacher
-        #
-        # Skipped for Admin/Coordinator — see above.
+        # Teacher ownership / class teacher
         # ----------------------------------------------------
 
         if not is_admin_or_coordinator:
@@ -678,38 +566,6 @@ class MarkAttendanceView(APIView):
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
-=======
-        # Teacher owns assignment
-        # ----------------------------------------------------
-
-        if assignment.teacher_id != teacher_profile.id:
-
-            return Response(
-                {
-                    "error": (
-                        "This attendance submission "
-                        "does not belong to you."
-                    )
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # ----------------------------------------------------
-        # Must be class teacher
-        # ----------------------------------------------------
-
-        if not assignment.is_class_teacher:
-
-            return Response(
-                {
-                    "error": (
-                        "Only the class teacher can "
-                        "save attendance for this class."
-                    )
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
->>>>>>> origin/main
 
         # ----------------------------------------------------
         # Active assignment
@@ -719,31 +575,17 @@ class MarkAttendanceView(APIView):
 
             return Response(
                 {
-                    "error": (
-                        "This assignment is inactive."
-                    )
+                    "error": "This assignment is inactive."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # ----------------------------------------------------
-        # Attendance date
-        # ----------------------------------------------------
-
         attendance_date = submission.date
-
-        # ----------------------------------------------------
-        # Teacher name
-        # ----------------------------------------------------
 
         teacher_name = (
             request.user.get_full_name()
             or request.user.username
         )
-
-        # ----------------------------------------------------
-        # Tracking
-        # ----------------------------------------------------
 
         saved_records = []
 
@@ -765,10 +607,6 @@ class MarkAttendanceView(APIView):
             "records"
         ]:
 
-            # ------------------------------------------------
-            # Get student + parent + parent user
-            # ------------------------------------------------
-
             student = get_object_or_404(
                 Student.objects.select_related(
                     "parent",
@@ -778,9 +616,7 @@ class MarkAttendanceView(APIView):
             )
 
             # ------------------------------------------------
-            # SECURITY:
-            #
-            # Student must belong to this classroom.
+            # SECURITY
             # ------------------------------------------------
 
             if (
@@ -800,43 +636,12 @@ class MarkAttendanceView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # ------------------------------------------------
-            # New values
-            # ------------------------------------------------
-
             new_status = record["status"]
 
             new_remarks = (
                 record.get("remarks")
                 or ""
             ).strip()
-
-            # ------------------------------------------------
-            # Existing attendance
-            # ------------------------------------------------
-
-            existing_attendance = (
-                Attendance.objects.filter(
-                    submission=submission,
-                    student=student,
-                ).first()
-            )
-
-            old_status = (
-                existing_attendance.status
-                if existing_attendance
-                else None
-            )
-
-            old_remarks = (
-                existing_attendance.remarks or ""
-                if existing_attendance
-                else ""
-            )
-
-            # ------------------------------------------------
-            # Save attendance
-            # ------------------------------------------------
 
             attendance, created_record = (
                 Attendance.objects.update_or_create(
@@ -874,31 +679,14 @@ class MarkAttendanceView(APIView):
             )
 
             # =================================================
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-            # BUSINESS RULE: only notify parents when the
-            # student is Absent or Excused. Present attendance
-            # is NOT a notification-worthy event.
+            # ONLY ABSENT / EXCUSED NOTIFY PARENTS
             # =================================================
 
             if attendance.status == Attendance.Status.PRESENT:
                 continue
 
             # =================================================
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
             # FIND PARENT
-            #
-            # Student
-            #    ↓
-            # ParentProfile
-            #    ↓
-            # CustomUser
             # =================================================
 
             parent_profile = getattr(
@@ -927,18 +715,7 @@ class MarkAttendanceView(APIView):
                     }
                 )
 
-                print(
-                    "⚠️ No ParentProfile found for student:",
-                    student.id,
-                    student.first_name,
-                    student.last_name,
-                )
-
                 continue
-
-            # ------------------------------------------------
-            # Parent user
-            # ------------------------------------------------
 
             parent_user = getattr(
                 parent_profile,
@@ -964,11 +741,6 @@ class MarkAttendanceView(APIView):
                         "reason":
                             "ParentProfile has no user.",
                     }
-                )
-
-                print(
-                    "⚠️ ParentProfile has no user:",
-                    parent_profile.id,
                 )
 
                 continue
@@ -1001,67 +773,14 @@ class MarkAttendanceView(APIView):
                 )
 
             # =================================================
-            # LOG INFORMATION
-            # =================================================
-
-            print(
-                "\n========================================"
-            )
-
-            print(
-                "📢 ATTENDANCE PARENT NOTIFICATION"
-            )
-
-            print(
-                "Student:",
-                student.id,
-                student.first_name,
-                student.last_name,
-            )
-
-            print(
-                "ParentProfile:",
-                parent_profile.id,
-            )
-
-            print(
-                "ParentUser:",
-                parent_user.id,
-                parent_user.username,
-            )
-
-            print(
-                "Attendance:",
-                attendance.id,
-            )
-
-            print(
-                "Status:",
-                attendance.status,
-            )
-
-            print(
-                "Title:",
-                title,
-            )
-
-            # =================================================
-            # PREVENT DUPLICATE SAME-STATUS NOTIFICATION
-            #
-            # If the teacher saves Present again, don't create
-            # another identical Present notification.
-            #
-            # If Present changes to Absent, a new notification
-            # WILL be created because the title changes.
+            # PREVENT DUPLICATE NOTIFICATION
             # =================================================
 
             existing_notification = (
                 attendance.notifications
                 .filter(
                     recipient=parent_user,
-                    notification_type=(
-                        "Attendance"
-                    ),
+                    notification_type="Attendance",
                     title=title,
                 )
                 .first()
@@ -1091,15 +810,6 @@ class MarkAttendanceView(APIView):
                         "status":
                             attendance.status,
                     }
-                )
-
-                print(
-                    "ℹ️ Notification already exists:",
-                    existing_notification.id,
-                )
-
-                print(
-                    "========================================\n"
                 )
 
                 continue
@@ -1154,21 +864,7 @@ class MarkAttendanceView(APIView):
                     }
                 )
 
-                print(
-                    "✅ Parent notification created:",
-                    notification.id,
-                )
-
-                print(
-                    "Recipient:",
-                    parent_user.username,
-                )
-
             except Exception as notification_error:
-
-                error_message = str(
-                    notification_error
-                )
 
                 notification_errors.append(
                     {
@@ -1187,18 +883,9 @@ class MarkAttendanceView(APIView):
                             parent_user.username,
 
                         "error":
-                            error_message,
+                            str(notification_error),
                     }
                 )
-
-                print(
-                    "❌ Attendance notification error:",
-                    notification_error,
-                )
-
-            print(
-                "========================================\n"
-            )
 
         # ====================================================
         # FINALIZE IMMEDIATELY
@@ -1227,9 +914,8 @@ class MarkAttendanceView(APIView):
 
         return Response(
             {
-                "message": (
-                    "Attendance marked successfully."
-                ),
+                "message":
+                    "Attendance marked successfully.",
 
                 "submission":
                     submission.id,
@@ -1245,10 +931,6 @@ class MarkAttendanceView(APIView):
 
                 "saved_records":
                     saved_records,
-
-                # --------------------------------------------
-                # Notification information
-                # --------------------------------------------
 
                 "notifications_sent":
                     notifications_sent,
@@ -1267,10 +949,6 @@ class MarkAttendanceView(APIView):
 
                 "notifications_already_exist":
                     notifications_already_exist,
-
-                # --------------------------------------------
-                # Summary
-                # --------------------------------------------
 
                 "notification_summary": {
 
@@ -1304,7 +982,6 @@ class MarkAttendanceView(APIView):
 # KEPT FOR BACKWARD COMPATIBILITY.
 #
 # React DOES NOT need to call this.
-# Attendance is finalized automatically when saved.
 # ============================================================
 
 class SubmitAttendanceView(APIView):
@@ -1485,32 +1162,16 @@ class StudentAttendanceHistoryView(APIView):
         student = get_object_or_404(
 
             Student.objects.select_related(
-<<<<<<< HEAD
                 "classroom",
                 "parent",
                 "parent__user",
-=======
-<<<<<<< HEAD
-                "classroom",
-                "parent",
-                "parent__user",
-=======
-                "classroom"
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
             ),
 
             pk=student_id,
         )
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
         # ----------------------------------------------------
-        # SECURITY — this endpoint takes student_id straight
-        # from the URL, so ownership MUST be verified here.
-        # Never trust the client's choice of student_id.
+        # SECURITY
         # ----------------------------------------------------
 
         user = request.user
@@ -1523,25 +1184,41 @@ class StudentAttendanceHistoryView(APIView):
         is_owning_parent = False
 
         if user.role == CustomUser.Role.PARENT:
+
             try:
+
                 parent_profile = user.parent_profile
-                is_owning_parent = parent_profile.children.filter(
-                    id=student.id
-                ).exists()
+
+                is_owning_parent = (
+                    parent_profile.children
+                    .filter(id=student.id)
+                    .exists()
+                )
+
             except ParentProfile.DoesNotExist:
+
                 is_owning_parent = False
 
         is_assigned_teacher = False
 
         if user.role == CustomUser.Role.TEACHER:
+
             try:
+
                 teacher_profile = user.teacher_profile
-                is_assigned_teacher = TeacherAssignment.objects.filter(
-                    teacher=teacher_profile,
-                    classroom=student.classroom,
-                    is_active=True,
-                ).exists()
+
+                is_assigned_teacher = (
+                    TeacherAssignment.objects
+                    .filter(
+                        teacher=teacher_profile,
+                        classroom=student.classroom,
+                        is_active=True,
+                    )
+                    .exists()
+                )
+
             except TeacherProfile.DoesNotExist:
+
                 is_assigned_teacher = False
 
         if not (
@@ -1549,6 +1226,7 @@ class StudentAttendanceHistoryView(APIView):
             or is_owning_parent
             or is_assigned_teacher
         ):
+
             return Response(
                 {
                     "error": (
@@ -1559,11 +1237,6 @@ class StudentAttendanceHistoryView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
         records = (
             Attendance.objects
             .filter(
@@ -1582,33 +1255,40 @@ class StudentAttendanceHistoryView(APIView):
             )
         )
 
-<<<<<<< HEAD
-        # =============================================
-        # QUERY-PARAM FILTERS
-        #
-        # ?status=Present/Absent/Excused
-        # ?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
-        # =============================================
+        # ----------------------------------------------------
+        # FILTERS
+        # ----------------------------------------------------
 
-        status_param = request.query_params.get("status")
-        start_date = request.query_params.get("start_date")
-        end_date = request.query_params.get("end_date")
+        status_param = request.query_params.get(
+            "status"
+        )
+
+        start_date = request.query_params.get(
+            "start_date"
+        )
+
+        end_date = request.query_params.get(
+            "end_date"
+        )
 
         if status_param:
-            records = records.filter(status=status_param)
+
+            records = records.filter(
+                status=status_param
+            )
 
         if start_date:
+
             records = records.filter(
                 submission__date__gte=start_date
             )
 
         if end_date:
+
             records = records.filter(
                 submission__date__lte=end_date
             )
 
-=======
->>>>>>> origin/main
         serializer = StudentAttendanceHistorySerializer(
             records,
             many=True,
@@ -1731,39 +1411,50 @@ class TeacherAttendanceHistoryView(APIView):
             )
         )
 
-<<<<<<< HEAD
-        # =============================================
-        # QUERY-PARAM FILTERS
-        #
-        # ?classroom=<id>, ?status=Present/Absent/Excused
-        # ?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
-        # =============================================
+        # ----------------------------------------------------
+        # FILTERS
+        # ----------------------------------------------------
 
-        classroom_id = request.query_params.get("classroom")
-        status_param = request.query_params.get("status")
-        start_date = request.query_params.get("start_date")
-        end_date = request.query_params.get("end_date")
+        classroom_id = request.query_params.get(
+            "classroom"
+        )
+
+        status_param = request.query_params.get(
+            "status"
+        )
+
+        start_date = request.query_params.get(
+            "start_date"
+        )
+
+        end_date = request.query_params.get(
+            "end_date"
+        )
 
         if classroom_id:
+
             records = records.filter(
                 submission__classroom_id=classroom_id
             )
 
         if status_param:
-            records = records.filter(status=status_param)
+
+            records = records.filter(
+                status=status_param
+            )
 
         if start_date:
+
             records = records.filter(
                 submission__date__gte=start_date
             )
 
         if end_date:
+
             records = records.filter(
                 submission__date__lte=end_date
             )
 
-=======
->>>>>>> origin/main
         data = []
 
         for record in records:
@@ -1843,24 +1534,26 @@ class TeacherAttendanceHistoryView(APIView):
         return Response(
             data,
             status=status.HTTP_200_OK,
-<<<<<<< HEAD
         )
+
 
 # ============================================================
 # ATTENDANCE REPORT — ADMIN / ACADEMIC COORDINATOR
 #
 # GET /api/attendance/report/
 #
-# The admin "Attendance Reports" screen previously called
-# `attendance/pending/`, which was never a real endpoint and
-# always 404'd. This gives it a real, filterable source:
-# ?classroom=<id>&status=Present/Absent/Excused
-# &from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
+# Filters:
+# ?classroom=<id>
+# ?status=Present/Absent/Excused
+# ?from_date=YYYY-MM-DD
+# ?to_date=YYYY-MM-DD
 # ============================================================
 
 class AttendanceReportView(APIView):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated
+    ]
 
     def get(self, request):
 
@@ -1868,72 +1561,130 @@ class AttendanceReportView(APIView):
             CustomUser.Role.SUPER_ADMIN,
             CustomUser.Role.ACADEMIC_COORDINATOR,
         ]:
+
             return Response(
-                {"error": "Access denied."},
+                {
+                    "error": "Access denied."
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         records = (
             Attendance.objects
-            .filter(submission__status=AttendanceSubmission.Status.FINAL)
+            .filter(
+                submission__status=
+                    AttendanceSubmission.Status.FINAL
+            )
             .select_related(
                 "student",
                 "submission",
                 "submission__classroom",
             )
-            .order_by("-submission__date")
+            .order_by(
+                "-submission__date"
+            )
         )
 
-        classroom_id = request.query_params.get("classroom")
-        status_param = request.query_params.get("status")
-        from_date = request.query_params.get("from_date")
-        to_date = request.query_params.get("to_date")
+        classroom_id = request.query_params.get(
+            "classroom"
+        )
+
+        status_param = request.query_params.get(
+            "status"
+        )
+
+        from_date = request.query_params.get(
+            "from_date"
+        )
+
+        to_date = request.query_params.get(
+            "to_date"
+        )
 
         if classroom_id:
+
             records = records.filter(
                 submission__classroom_id=classroom_id
             )
 
         if status_param:
-            records = records.filter(status=status_param)
+
+            records = records.filter(
+                status=status_param
+            )
 
         if from_date:
-            records = records.filter(submission__date__gte=from_date)
+
+            records = records.filter(
+                submission__date__gte=from_date
+            )
 
         if to_date:
-            records = records.filter(submission__date__lte=to_date)
+
+            records = records.filter(
+                submission__date__lte=to_date
+            )
 
         data = [
             {
-                "date": r.submission.date,
+                "date":
+                    record.submission.date,
+
                 "student_name": (
-                    f"{r.student.first_name} {r.student.last_name}"
+                    f"{record.student.first_name} "
+                    f"{record.student.last_name}"
                 ).strip(),
-                "admission_number": r.student.admission_number,
-                "class_name": str(r.submission.classroom),
-                "status": r.status,
-                "remarks": r.remarks or "",
+
+                "admission_number":
+                    record.student.admission_number,
+
+                "class_name":
+                    str(record.submission.classroom),
+
+                "status":
+                    record.status,
+
+                "remarks":
+                    record.remarks or "",
             }
-            for r in records
+
+            for record in records
         ]
 
         total = records.count()
-        present = records.filter(status=Attendance.Status.PRESENT).count()
-        absent = records.filter(status=Attendance.Status.ABSENT).count()
-        excused = records.filter(status=Attendance.Status.EXCUSED).count()
+
+        present = records.filter(
+            status=Attendance.Status.PRESENT
+        ).count()
+
+        absent = records.filter(
+            status=Attendance.Status.ABSENT
+        ).count()
+
+        excused = records.filter(
+            status=Attendance.Status.EXCUSED
+        ).count()
 
         return Response(
             {
-                "records": data,
+                "records":
+                    data,
+
                 "summary": {
-                    "total": total,
-                    "present": present,
-                    "absent": absent,
-                    "excused": excused,
+
+                    "total":
+                        total,
+
+                    "present":
+                        present,
+
+                    "absent":
+                        absent,
+
+                    "excused":
+                        excused,
                 },
             },
+
             status=status.HTTP_200_OK,
-        )
-=======
-        )
->>>>>>> origin/main
+        ) 

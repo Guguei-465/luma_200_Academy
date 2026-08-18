@@ -420,25 +420,23 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
         IsSuperAdminOrAccountant,
     ]
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
     def perform_create(self, serializer):
-        # received_by is read-only on the serializer — set it here
-        # from the logged-in accountant's own profile so it can
-        # never be spoofed by the client. SUPER_ADMIN users may not
-        # have an AccountantProfile, in which case it's left null.
-        accountant_profile = getattr(
-            self.request.user, "accountant_profile", None
-        )
-        serializer.save(received_by=accountant_profile)
+        """
+        received_by is controlled by the backend.
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
+        The client cannot spoof another accountant.
+        """
+
+        accountant_profile = getattr(
+            self.request.user,
+            "accountant_profile",
+            None,
+        )
+
+        serializer.save(
+            received_by=accountant_profile
+        )
+
     @action(
         detail=False,
         methods=["get"],
@@ -607,9 +605,7 @@ class StkPushAPIView(APIView):
             return Response(
                 {
                     "success": False,
-                    "message": (
-                        "student_id is required."
-                    ),
+                    "message": "student_id is required.",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -619,9 +615,7 @@ class StkPushAPIView(APIView):
             return Response(
                 {
                     "success": False,
-                    "message": (
-                        "amount is required."
-                    ),
+                    "message": "amount is required.",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -631,9 +625,7 @@ class StkPushAPIView(APIView):
             return Response(
                 {
                     "success": False,
-                    "message": (
-                        "phone is required."
-                    ),
+                    "message": "phone is required.",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -784,9 +776,7 @@ class StkPushAPIView(APIView):
             return Response(
                 {
                     "success": False,
-                    "message": (
-                        "Invalid payment amount."
-                    ),
+                    "message": "Invalid payment amount.",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -821,9 +811,7 @@ class StkPushAPIView(APIView):
                         f"fee balance of "
                         f"KES {student_fee.balance}."
                     ),
-                    "balance": (
-                        student_fee.balance
-                    ),
+                    "balance": student_fee.balance,
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -853,9 +841,7 @@ class StkPushAPIView(APIView):
                 + phone_number
             )
 
-        if not phone_number.startswith(
-            "2547"
-        ):
+        if not phone_number.startswith("2547"):
 
             return Response(
                 {
@@ -1055,9 +1041,7 @@ class MpesaCallbackAPIView(APIView):
             return Response(
                 {
                     "ResultCode": 0,
-                    "ResultDesc": (
-                        "No CheckoutRequestID."
-                    ),
+                    "ResultDesc": "No CheckoutRequestID.",
                 }
             )
 
@@ -1066,9 +1050,7 @@ class MpesaCallbackAPIView(APIView):
         # -------------------------------------------------
 
         MpesaCallbackLog.objects.get_or_create(
-            checkout_request_id=(
-                checkout_request_id
-            ),
+            checkout_request_id=checkout_request_id,
             defaults={
                 "payload": data,
             },
@@ -1082,9 +1064,7 @@ class MpesaCallbackAPIView(APIView):
 
             payment = (
                 FeePayment.objects.get(
-                    checkout_request_id=(
-                        checkout_request_id
-                    )
+                    checkout_request_id=checkout_request_id
                 )
             )
 
@@ -1093,9 +1073,7 @@ class MpesaCallbackAPIView(APIView):
             return Response(
                 {
                     "ResultCode": 0,
-                    "ResultDesc": (
-                        "Payment not found."
-                    ),
+                    "ResultDesc": "Payment not found.",
                 }
             )
 
@@ -1111,9 +1089,7 @@ class MpesaCallbackAPIView(APIView):
             return Response(
                 {
                     "ResultCode": 0,
-                    "ResultDesc": (
-                        "Already processed."
-                    ),
+                    "ResultDesc": "Already processed.",
                 }
             )
 
@@ -1268,37 +1244,155 @@ class MpesaCallbackAPIView(APIView):
 
 
 # =====================================================
-# Get Receipt by Receipt Number
+# GET RECEIPT BY RECEIPT NUMBER
 # =====================================================
+
 class ReceiptByNumberAPIView(APIView):
-    """Return payment/receipt details using receipt_number."""
-    permission_classes = [IsAuthenticated]
+    """
+    Return payment/receipt details using receipt_number.
+
+    Staff can view any receipt.
+
+    Parents can only view receipts belonging to
+    their own children.
+    """
+
+    permission_classes = [
+        IsAuthenticated
+    ]
 
     def get(self, request, receipt_number):
+
         try:
-            payment = FeePayment.objects.select_related(
-                "student_fee",
-                "student_fee__student",
-            ).get(receipt_number=receipt_number)
-        except FeePayment.DoesNotExist:
-            return Response(
-                {"detail": "Receipt not found."},
-                status=status.HTTP_404_NOT_FOUND
+
+            payment = (
+                FeePayment.objects
+                .select_related(
+                    "student_fee",
+                    "student_fee__student",
+                    "student_fee__student__parent",
+                )
+                .get(
+                    receipt_number=receipt_number
+                )
             )
+
+        except FeePayment.DoesNotExist:
+
+            return Response(
+                {
+                    "detail": "Receipt not found."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # -------------------------------------------------
+        # AUTHORIZE RECEIPT ACCESS
+        # -------------------------------------------------
+
+        user = request.user
+        role = getattr(
+            user,
+            "role",
+            None,
+        )
+
+        allowed_staff_roles = [
+            "SUPER_ADMIN",
+            "ACCOUNTANT",
+            "ACADEMIC_COORDINATOR",
+        ]
+
+        if role == "PARENT":
+
+            parent_profile = getattr(
+                user,
+                "parent_profile",
+                None,
+            )
+
+            if (
+                not parent_profile
+                or payment.student_fee.student.parent_id
+                != parent_profile.id
+            ):
+
+                return Response(
+                    {
+                        "detail": (
+                            "You are not authorized "
+                            "to view this receipt."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        elif role not in allowed_staff_roles:
+
+            return Response(
+                {
+                    "detail": (
+                        "You are not authorized "
+                        "to view this receipt."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # -------------------------------------------------
+        # RECEIPT DATA
+        # -------------------------------------------------
+
+        student = payment.student_fee.student
 
         data = {
             "id": payment.id,
-            "receipt_number": payment.receipt_number,
-            "student_name": f"{payment.student_fee.student.first_name} {payment.student_fee.student.last_name}",
-            "admission_number": payment.student_fee.student.admission_number,
+
+            "receipt_number": (
+                payment.receipt_number
+            ),
+
+            "student_name": (
+                f"{student.first_name} "
+                f"{student.last_name}"
+            ),
+
+            "admission_number": (
+                student.admission_number
+            ),
+
             "amount": payment.amount,
-            "payment_method": payment.payment_method,
-            "payment_status": payment.payment_status,
-            "payment_date": payment.payment_date,
-            "phone_number": payment.phone_number,
-            "mpesa_receipt": payment.mpesa_receipt,
-            "result_description": payment.result_description,
-            "transaction_date": payment.transaction_date,
+
+            "payment_method": (
+                payment.payment_method
+            ),
+
+            "payment_status": (
+                payment.payment_status
+            ),
+
+            "payment_date": (
+                payment.payment_date
+            ),
+
+            "phone_number": (
+                payment.phone_number
+            ),
+
+            "mpesa_receipt": (
+                payment.mpesa_receipt
+            ),
+
+            "result_description": (
+                payment.result_description
+            ),
+
+            "transaction_date": (
+                payment.transaction_date
+            ),
         }
 
-        return Response(data)
+        return Response(
+            data,
+            status=status.HTTP_200_OK,
+        )

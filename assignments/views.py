@@ -3,19 +3,12 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 
 from accounts.models import TeacherProfile
+from accounts.serializers import TeacherProfilePublicSerializer
 from .models import TeacherAssignment
 from .serializers import (
     TeacherAssignmentSerializer,
     TeacherProfileSerializer,
 )
-<<<<<<< HEAD
-from accounts.serializers import TeacherProfilePublicSerializer
-=======
-<<<<<<< HEAD
-from accounts.serializers import TeacherProfilePublicSerializer
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 from accounts.permisions import IsAdminOrAcademicCoordinator
 
 
@@ -27,25 +20,13 @@ class TeacherProfileListView(generics.ListAPIView):
     """
     Returns teachers who have active assignments.
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-    Open to any authenticated user (used for dropdowns across roles),
-    so this MUST use the public serializer — it excludes national_id
-    and date_of_birth to avoid leaking teacher PII to Parents/Students.
+    This endpoint is used for teacher dropdowns.
+
+    Uses the public serializer so sensitive teacher information
+    such as national ID and date of birth is not exposed.
     """
 
     serializer_class = TeacherProfilePublicSerializer
-<<<<<<< HEAD
-=======
-=======
-    Used mainly by Academic Coordinator/Admin dropdowns.
-    """
-
-    serializer_class = TeacherProfileSerializer
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
@@ -65,12 +46,6 @@ class MyTeacherAssignmentsView(generics.ListAPIView):
     """
     Returns ONLY the TeacherAssignment records belonging
     to the currently logged-in teacher.
-
-    IMPORTANT:
-    This is different from my-profile/.
-
-    my-profile/      -> TeacherProfile
-    my-assignments/  -> TeacherAssignment
     """
 
     serializer_class = TeacherAssignmentSerializer
@@ -79,17 +54,11 @@ class MyTeacherAssignmentsView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
 
-        # ----------------------------------------------------
-        # Make sure this is a teacher
-        # ----------------------------------------------------
         try:
             teacher_profile = user.teacher_profile
         except TeacherProfile.DoesNotExist:
             return TeacherAssignment.objects.none()
 
-        # ----------------------------------------------------
-        # Return this teacher's ACTIVE assignments
-        # ----------------------------------------------------
         return (
             TeacherAssignment.objects
             .filter(
@@ -112,7 +81,7 @@ class MyTeacherAssignmentsView(generics.ListAPIView):
 
 
 # ============================================================
-# ASSIGNMENT CRUD — ACADEMIC COORDINATOR / ADMIN
+# ASSIGNMENT CREATE — ADMIN / ACADEMIC COORDINATOR
 # ============================================================
 
 class TeacherAssignmentCreateView(generics.CreateAPIView):
@@ -125,6 +94,10 @@ class TeacherAssignmentCreateView(generics.CreateAPIView):
         IsAdminOrAcademicCoordinator
     ]
 
+
+# ============================================================
+# ASSIGNMENT LIST
+# ============================================================
 
 class TeacherAssignmentListView(generics.ListAPIView):
 
@@ -186,6 +159,7 @@ class TeacherAssignmentListView(generics.ListAPIView):
         # ----------------------------------------------------
         # ADMIN / ACADEMIC COORDINATOR
         # ----------------------------------------------------
+
         if user.role in [
             "SUPER_ADMIN",
             "ACADEMIC_COORDINATOR",
@@ -195,8 +169,8 @@ class TeacherAssignmentListView(generics.ListAPIView):
         # ----------------------------------------------------
         # TEACHER
         # ----------------------------------------------------
-        if user.role == "TEACHER":
 
+        if user.role == "TEACHER":
             return queryset.filter(
                 teacher__user=user,
                 is_active=True,
@@ -205,6 +179,7 @@ class TeacherAssignmentListView(generics.ListAPIView):
         # ----------------------------------------------------
         # EVERYONE ELSE
         # ----------------------------------------------------
+
         return TeacherAssignment.objects.none()
 
 
@@ -268,13 +243,10 @@ class TeacherProfileViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Logged-in teacher's own profile.
 
-    KEEP THIS ENDPOINT.
-
     /assignments/my-profile/
-    still returns TeacherProfile.
 
-    We are NOT changing this because other parts
-    of your system may depend on it.
+    This endpoint returns only the currently authenticated
+    teacher's profile.
     """
 
     serializer_class = TeacherProfileSerializer
@@ -287,4 +259,4 @@ class TeacherProfileViewSet(viewsets.ReadOnlyModelViewSet):
 
         return TeacherProfile.objects.filter(
             user=self.request.user
-        )
+        ) 

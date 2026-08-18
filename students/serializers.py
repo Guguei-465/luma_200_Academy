@@ -1,10 +1,6 @@
 from rest_framework import serializers
 
-<<<<<<< HEAD
 from accounts.models import CustomUser, ParentProfile
-=======
-from accounts.models import ParentProfile
->>>>>>> origin/main
 from students.models import Student, StudentTransfer
 
 
@@ -17,32 +13,26 @@ class StudentSerializer(serializers.ModelSerializer):
     classroom_name = serializers.SerializerMethodField()
     class_teacher = serializers.SerializerMethodField()
     parent_name = serializers.SerializerMethodField()
-<<<<<<< HEAD
     username = serializers.SerializerMethodField()
-=======
->>>>>>> origin/main
 
     # =================================================
     # Parent phone number
     #
-    # Used when creating a student.
+    # Used when creating/updating a student.
     # It is NOT stored directly on Student.
     # =================================================
 
     phone_number = serializers.CharField(
         write_only=True,
-<<<<<<< HEAD
         required=False,
+        allow_blank=False,
     )
 
     # =================================================
     # Optional login account link
     #
-    # Lets the admin/coordinator connect this academic
-    # record to an EXISTING login account (role=STUDENT)
-    # that doesn't yet have a classroom/parent attached.
-    # Not required — a roster entry can exist without a
-    # login account yet, or vice versa.
+    # Allows admin/coordinator to connect an existing
+    # STUDENT login account to this academic record.
     # =================================================
 
     user = serializers.PrimaryKeyRelatedField(
@@ -52,9 +42,6 @@ class StudentSerializer(serializers.ModelSerializer):
         ),
         required=False,
         allow_null=True,
-=======
-        required=True
->>>>>>> origin/main
     )
 
     class Meta:
@@ -62,13 +49,12 @@ class StudentSerializer(serializers.ModelSerializer):
 
         fields = [
             "id",
-<<<<<<< HEAD
             "user",
             "username",
-=======
->>>>>>> origin/main
+
             "admission_number",
             "assessment_number",
+
             "first_name",
             "last_name",
             "gender",
@@ -98,12 +84,11 @@ class StudentSerializer(serializers.ModelSerializer):
             "classroom_name",
             "class_teacher",
             "parent_name",
-<<<<<<< HEAD
             "username",
         ]
 
     # =================================================
-    # Linked login username (if any)
+    # Linked login username
     # =================================================
 
     def get_username(self, obj):
@@ -113,18 +98,23 @@ class StudentSerializer(serializers.ModelSerializer):
 
         return None
 
+    # =================================================
+    # Validate login account
+    # =================================================
+
     def validate_user(self, value):
 
         if value is None:
             return value
 
-        # Re-check freshness on update: the queryset above already
-        # excludes users with a student_record, but on PATCH/PUT the
-        # instance being edited is allowed to keep its own user.
-        already_linked = Student.objects.filter(
-            user=value
-        ).exclude(
-            pk=self.instance.pk if self.instance else None
+        already_linked = (
+            Student.objects
+            .filter(user=value)
+            .exclude(
+                pk=self.instance.pk
+                if self.instance
+                else None
+            )
         )
 
         if already_linked.exists():
@@ -136,11 +126,6 @@ class StudentSerializer(serializers.ModelSerializer):
         return value
 
     # =================================================
-=======
-        ]
-
-    # =================================================
->>>>>>> origin/main
     # Classroom name
     # =================================================
 
@@ -171,8 +156,11 @@ class StudentSerializer(serializers.ModelSerializer):
 
     def get_parent_name(self, obj):
 
-        if obj.parent:
-            return obj.parent.user.get_full_name()
+        if obj.parent and obj.parent.user:
+            return (
+                obj.parent.user.get_full_name()
+                or obj.parent.user.username
+            )
 
         return None
 
@@ -183,7 +171,6 @@ class StudentSerializer(serializers.ModelSerializer):
     def validate_phone_number(self, value):
 
         try:
-
             ParentProfile.objects.get(
                 user__phone_number=value
             )
@@ -197,32 +184,16 @@ class StudentSerializer(serializers.ModelSerializer):
         return value
 
     # =================================================
-    # Create student
-    #
-    # Parent phone
-    #      ↓
-    # ParentProfile
-    #      ↓
-    # Student.parent
+    # Resolve parent from phone number
     # =================================================
 
-<<<<<<< HEAD
     def _resolve_parent(self, phone_number):
 
-        try:
+        if not phone_number:
+            return None
 
+        try:
             return ParentProfile.objects.get(
-=======
-    def create(self, validated_data):
-
-        phone_number = validated_data.pop(
-            "phone_number"
-        )
-
-        try:
-
-            parent = ParentProfile.objects.get(
->>>>>>> origin/main
                 user__phone_number=phone_number
             )
 
@@ -233,40 +204,50 @@ class StudentSerializer(serializers.ModelSerializer):
                     "No parent account was found with this phone number."
             })
 
-<<<<<<< HEAD
+    # =================================================
+    # Create student
+    # =================================================
+
     def create(self, validated_data):
 
         phone_number = validated_data.pop(
-            "phone_number", None
+            "phone_number",
+            None,
         )
 
+        # A parent phone is required when creating a student.
         if not phone_number:
             raise serializers.ValidationError({
                 "phone_number":
-                    "Parent/guardian phone number is required to link "
-                    "a new student to their parent account."
+                    "Parent/guardian phone number is required to "
+                    "link a new student to their parent account."
             })
 
         parent = self._resolve_parent(phone_number)
 
-=======
->>>>>>> origin/main
         student = Student.objects.create(
             parent=parent,
-            **validated_data
+            **validated_data,
         )
 
         return student
 
-<<<<<<< HEAD
+    # =================================================
+    # Update student
+    # =================================================
+
     def update(self, instance, validated_data):
 
-        # phone_number is optional on update — only re-link the
-        # parent if a new number was actually supplied.
-        phone_number = validated_data.pop("phone_number", None)
+        # Parent phone is optional during update.
+        phone_number = validated_data.pop(
+            "phone_number",
+            None,
+        )
 
         if phone_number:
-            instance.parent = self._resolve_parent(phone_number)
+            instance.parent = self._resolve_parent(
+                phone_number
+            )
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -275,8 +256,6 @@ class StudentSerializer(serializers.ModelSerializer):
 
         return instance
 
-=======
->>>>>>> origin/main
 
 # =====================================================
 # Student List Serializer
@@ -287,23 +266,19 @@ class StudentListSerializer(serializers.ModelSerializer):
     classroom_name = serializers.SerializerMethodField()
     class_teacher = serializers.SerializerMethodField()
     parent_name = serializers.SerializerMethodField()
-<<<<<<< HEAD
     username = serializers.SerializerMethodField()
-=======
->>>>>>> origin/main
 
     class Meta:
         model = Student
 
         fields = [
             "id",
-<<<<<<< HEAD
             "user",
             "username",
-=======
->>>>>>> origin/main
+
             "admission_number",
             "assessment_number",
+
             "first_name",
             "last_name",
             "gender",
@@ -325,7 +300,10 @@ class StudentListSerializer(serializers.ModelSerializer):
 
         read_only_fields = fields
 
-<<<<<<< HEAD
+    # =================================================
+    # Username
+    # =================================================
+
     def get_username(self, obj):
 
         if obj.user:
@@ -333,8 +311,6 @@ class StudentListSerializer(serializers.ModelSerializer):
 
         return None
 
-=======
->>>>>>> origin/main
     # =================================================
     # Classroom name
     # =================================================
@@ -366,8 +342,11 @@ class StudentListSerializer(serializers.ModelSerializer):
 
     def get_parent_name(self, obj):
 
-        if obj.parent:
-            return obj.parent.user.get_full_name()
+        if obj.parent and obj.parent.user:
+            return (
+                obj.parent.user.get_full_name()
+                or obj.parent.user.username
+            )
 
         return None
 
@@ -457,7 +436,7 @@ class StudentTransferSerializer(
 
     def validate(self, attrs):
 
-        # Prevent transferring to same classroom
+        # Prevent transferring to same classroom.
         if (
             attrs["from_classroom"]
             == attrs["to_classroom"]
@@ -469,7 +448,7 @@ class StudentTransferSerializer(
             })
 
         # Make sure student's current classroom
-        # matches the selected from classroom
+        # matches the selected from classroom.
         if (
             attrs["student"].classroom
             != attrs["from_classroom"]

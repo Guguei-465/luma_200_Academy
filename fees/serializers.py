@@ -9,8 +9,9 @@ from .models import (
 
 
 # =====================================================
-# Fee Structure
+# FEE STRUCTURE
 # =====================================================
+
 class FeeStructureSerializer(serializers.ModelSerializer):
 
     total_fee = serializers.ReadOnlyField()
@@ -21,16 +22,20 @@ class FeeStructureSerializer(serializers.ModelSerializer):
 
 
 # =====================================================
-# Student Fee
+# STUDENT FEE
 # =====================================================
+
 class StudentFeeSerializer(serializers.ModelSerializer):
 
     student_name = serializers.SerializerMethodField()
+
     classroom = serializers.SerializerMethodField()
+
     term = serializers.CharField(
         source="fee_structure.term",
         read_only=True,
     )
+
     academic_year = serializers.IntegerField(
         source="fee_structure.academic_year",
         read_only=True,
@@ -38,6 +43,7 @@ class StudentFeeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StudentFee
+
         fields = [
             "id",
             "student",
@@ -57,40 +63,34 @@ class StudentFeeSerializer(serializers.ModelSerializer):
         ]
 
     def get_student_name(self, obj):
-        return f"{obj.student.first_name} {obj.student.last_name}"
+        return (
+            f"{obj.student.first_name} "
+            f"{obj.student.last_name}"
+        )
 
     def get_classroom(self, obj):
         return str(obj.fee_structure.classroom)
 
 
 # =====================================================
-# Fee Payment
+# FEE PAYMENT
 # =====================================================
+
 class FeePaymentSerializer(serializers.ModelSerializer):
 
     student_name = serializers.SerializerMethodField()
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-    # The React payment form (RecordPayment.jsx) posts this field name,
-    # but the model's matching field is called `external_reference`.
-    # Without this explicit mapping, DRF silently drops the incoming
-    # `transaction_ref` value and it never gets saved anywhere.
+    # React payment form sends transaction_ref.
+    # Model field is external_reference.
     transaction_ref = serializers.CharField(
         source="external_reference",
         required=False,
         allow_blank=True,
     )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
     class Meta:
         model = FeePayment
+
         fields = "__all__"
 
         read_only_fields = [
@@ -104,18 +104,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             "is_reconciled",
             "created_at",
             "updated_at",
-<<<<<<< HEAD
-            # received_by must never come from the client — the view
-            # sets it from the logged-in accountant's own profile.
             "received_by",
-=======
-<<<<<<< HEAD
-            # received_by must never come from the client — the view
-            # sets it from the logged-in accountant's own profile.
-            "received_by",
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
         ]
 
     def get_student_name(self, obj):
@@ -124,41 +113,43 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             f"{obj.student_fee.student.last_name}"
         )
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
     def validate(self, data):
         """
-        SPEC RULE (fees, T5): amount paid can never exceed the
-        student's total fee / remaining balance. The STK-push flow
-        already enforces this (StkPushSerializer) — this is the
-        manual/cash/bank recording path used directly against
-        FeePaymentViewSet, which previously had NO such check.
+        Prevent payments from exceeding the student's
+        remaining fee balance.
+
+        This applies to manual/cash/bank payments created
+        through FeePaymentViewSet.
         """
 
-        student_fee = data.get("student_fee") or getattr(
-            self.instance, "student_fee", None
+        student_fee = data.get(
+            "student_fee"
+        ) or getattr(
+            self.instance,
+            "student_fee",
+            None,
         )
 
         amount = data.get("amount")
+
         if amount is None and self.instance is not None:
             amount = self.instance.amount
 
         if amount is not None and amount <= 0:
             raise serializers.ValidationError(
-                {"amount": "Amount must be greater than zero."}
+                {
+                    "amount": (
+                        "Amount must be greater than zero."
+                    )
+                }
             )
 
         if student_fee is not None and amount is not None:
 
-            # The balance already reflects this payment's OLD amount
-            # (if we're editing an existing successful payment), so
-            # add that back before comparing, otherwise every edit
-            # of an existing payment would falsely look like an
-            # overpayment.
             available_balance = student_fee.balance
 
+            # When editing an existing successful payment,
+            # add the old amount back before validating.
             if (
                 self.instance is not None
                 and self.instance.student_fee_id == student_fee.id
@@ -171,23 +162,19 @@ class FeePaymentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {
                         "amount": (
-                            "Amount exceeds remaining balance "
-                            f"({available_balance})."
+                            "Amount exceeds remaining "
+                            f"balance ({available_balance})."
                         )
                     }
                 )
 
         return data
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 
 # =====================================================
-# M-Pesa Callback Log
+# M-PESA CALLBACK LOG
 # =====================================================
+
 class MpesaCallbackLogSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -196,7 +183,7 @@ class MpesaCallbackLogSerializer(serializers.ModelSerializer):
 
 
 # =====================================================
-# STK Push Serializer
+# STK PUSH SERIALIZER
 # =====================================================
 
 class StkPushSerializer(serializers.Serializer):
@@ -216,7 +203,8 @@ class StkPushSerializer(serializers.Serializer):
 
     def validate_phone_number(self, value):
         """
-        Convert Kenyan numbers to 2547XXXXXXXX format.
+        Convert Kenyan phone numbers into
+        2547XXXXXXXX format.
         """
 
         value = value.strip()
@@ -250,15 +238,19 @@ class StkPushSerializer(serializers.Serializer):
         if amount <= 0:
             raise serializers.ValidationError(
                 {
-                    "amount": "Amount must be greater than zero."
+                    "amount": (
+                        "Amount must be greater than zero."
+                    )
                 }
             )
 
         if amount > student_fee.balance:
             raise serializers.ValidationError(
                 {
-                    "amount":
-                    f"Amount exceeds remaining balance ({student_fee.balance})."
+                    "amount": (
+                        "Amount exceeds remaining "
+                        f"balance ({student_fee.balance})."
+                    )
                 }
             )
 

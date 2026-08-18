@@ -10,11 +10,8 @@ from .views import (
     StudentUpdateView,
     StudentDeleteView,
     ParentChildrenView,
-<<<<<<< HEAD
     MyStudentRecordView,
     UnlinkedStudentUsersView,
-=======
->>>>>>> origin/main
 )
 
 
@@ -27,46 +24,43 @@ urlpatterns = [
     path(
         "",
         StudentListView.as_view(),
-        name="student-list"
+        name="student-list",
     ),
 
     path(
-<<<<<<< HEAD
         "me/",
         MyStudentRecordView.as_view(),
-        name="student-me"
+        name="student-me",
     ),
 
     path(
         "unlinked-users/",
         UnlinkedStudentUsersView.as_view(),
-        name="student-unlinked-users"
+        name="student-unlinked-users",
     ),
 
     path(
-=======
->>>>>>> origin/main
         "<int:pk>/",
         StudentDetailView.as_view(),
-        name="student-detail"
+        name="student-detail",
     ),
 
     path(
         "create/",
         StudentCreateView.as_view(),
-        name="student-create"
+        name="student-create",
     ),
 
     path(
         "update/<int:pk>/",
         StudentUpdateView.as_view(),
-        name="student-update"
+        name="student-update",
     ),
 
     path(
         "delete/<int:pk>/",
         StudentDeleteView.as_view(),
-        name="student-delete"
+        name="student-delete",
     ),
 
     # =================================================
@@ -76,21 +70,28 @@ urlpatterns = [
     path(
         "transfer/",
         StudentTransferView.as_view(),
-        name="student-transfer"
+        name="student-transfer",
     ),
 
     path(
         "transfers/",
         StudentTransferListView.as_view(),
-        name="student-transfer-list"
+        name="student-transfer-list",
     ),
 
     path(
         "transfers/<int:pk>/",
         StudentTransferDetailView.as_view(),
-        name="student-transfer-detail"
+        name="student-transfer-detail",
     ),
 
-    path("parent/children/", ParentChildrenView.as_view(), name="parent-children"),
+    # =================================================
+    # Parent Children
+    # =================================================
 
+    path(
+        "parent/children/",
+        ParentChildrenView.as_view(),
+        name="parent-children",
+    ),
 ]

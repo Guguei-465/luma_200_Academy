@@ -1,34 +1,15 @@
 from django.db import transaction
-<<<<<<< HEAD
 from django.db.models import Q
-=======
-<<<<<<< HEAD
-from django.db.models import Q
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 from django.shortcuts import get_object_or_404
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
 from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework import status
 
 from accounts.models import CustomUser, ParentProfile, TeacherProfile
-<<<<<<< HEAD
 from accounts.serializers import UserSerializer
-=======
-=======
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
 
-from accounts.models import ParentProfile
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 from students.models import Student, StudentTransfer
 from students.serializers import (
     StudentSerializer,
@@ -38,25 +19,13 @@ from students.serializers import (
 
 
 # =====================================================
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
 # SECURITY
-#
-# None of the views below had ANY role restriction before —
-# only IsAuthenticated. That meant any logged-in user of any
-# role (including Parent) could list/view every student in the
-# school, and could create/update/DELETE any student record.
-# This directly violates the spec's role permission table
-# ("Parent: ALL writes forbidden", "Teacher: cannot write
-# Students") so every view here now enforces roles explicitly.
 # =====================================================
 
 class IsAdminOrCoordinatorForStudents(BasePermission):
     """
-    Student records are managed by Super Admin / Academic
-    Coordinator only — matches the spec's permission table.
+    Student records are managed by Super Admin /
+    Academic Coordinator only.
     """
 
     def has_permission(self, request, view):
@@ -70,7 +39,10 @@ class IsAdminOrCoordinatorForStudents(BasePermission):
 
 
 def _teacher_classroom_ids(user):
-    """Classroom IDs this teacher has an active assignment in."""
+    """
+    Return classroom IDs that this teacher is actively
+    assigned to teach.
+    """
 
     from assignments.models import TeacherAssignment
 
@@ -83,16 +55,14 @@ def _teacher_classroom_ids(user):
         TeacherAssignment.objects.filter(
             teacher=teacher_profile,
             is_active=True,
-        ).values_list("classroom_id", flat=True)
+        ).values_list(
+            "classroom_id",
+            flat=True,
+        )
     )
 
 
 # =====================================================
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 # STUDENT LIST
 # GET /api/students/
 # =====================================================
@@ -103,16 +73,16 @@ class StudentListView(APIView):
 
     def get(self, request):
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
         user = request.user
 
         base_qs = Student.objects.select_related(
             "parent__user",
             "classroom",
         )
+
+        # ---------------------------------------------
+        # SUPER ADMIN / ACADEMIC COORDINATOR / ACCOUNTANT
+        # ---------------------------------------------
 
         if user.role in [
             CustomUser.Role.SUPER_ADMIN,
@@ -121,33 +91,42 @@ class StudentListView(APIView):
         ]:
             students = base_qs.all()
 
+        # ---------------------------------------------
+        # TEACHER
+        # ---------------------------------------------
+
         elif user.role == CustomUser.Role.TEACHER:
             students = base_qs.filter(
                 classroom_id__in=_teacher_classroom_ids(user)
             )
 
+        # ---------------------------------------------
+        # PARENT
+        # ---------------------------------------------
+
         elif user.role == CustomUser.Role.PARENT:
+
             parent_profile = ParentProfile.objects.filter(
                 user=user
             ).first()
-            students = (
-                base_qs.filter(parent=parent_profile)
-                if parent_profile
-                else Student.objects.none()
-            )
+
+            if parent_profile:
+                students = base_qs.filter(
+                    parent=parent_profile
+                )
+            else:
+                students = Student.objects.none()
+
+        # ---------------------------------------------
+        # UNKNOWN ROLE
+        # ---------------------------------------------
 
         else:
             students = Student.objects.none()
-<<<<<<< HEAD
 
-        # =============================================
-        # QUERY-PARAM FILTERS
-        #
-        # Same filtering shape used everywhere else in the
-        # app (?classroom=<id>, ?status=, ?gender=, ?search=)
-        # so every "students" screen — admin, coordinator,
-        # teacher — can filter consistently.
-        # =============================================
+        # =================================================
+        # FILTERS
+        # =================================================
 
         classroom_id = request.query_params.get("classroom")
         status_param = request.query_params.get("status")
@@ -155,13 +134,19 @@ class StudentListView(APIView):
         search = request.query_params.get("search")
 
         if classroom_id:
-            students = students.filter(classroom_id=classroom_id)
+            students = students.filter(
+                classroom_id=classroom_id
+            )
 
         if status_param:
-            students = students.filter(status=status_param)
+            students = students.filter(
+                status=status_param
+            )
 
         if gender_param:
-            students = students.filter(gender=gender_param)
+            students = students.filter(
+                gender=gender_param
+            )
 
         if search:
             students = students.filter(
@@ -170,19 +155,11 @@ class StudentListView(APIView):
                 | Q(admission_number__icontains=search)
                 | Q(assessment_number__icontains=search)
             )
-=======
-=======
-        students = Student.objects.select_related(
-            "parent__user",
-            "classroom",
-        ).all()
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 
         serializer = StudentListSerializer(
             students,
             many=True,
-            context={"request": request}
+            context={"request": request},
         )
 
         return Response(serializer.data)
@@ -190,7 +167,7 @@ class StudentListView(APIView):
 
 # =====================================================
 # STUDENT DETAIL
-# GET /api/students/int:pk/
+# GET /api/students/<pk>/
 # =====================================================
 
 class StudentDetailView(APIView):
@@ -204,14 +181,14 @@ class StudentDetailView(APIView):
                 "parent__user",
                 "classroom",
             ),
-            pk=pk
+            pk=pk,
         )
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
         user = request.user
+
+        # ---------------------------------------------
+        # ADMIN / COORDINATOR / ACCOUNTANT
+        # ---------------------------------------------
 
         allowed = user.role in [
             CustomUser.Role.SUPER_ADMIN,
@@ -219,15 +196,29 @@ class StudentDetailView(APIView):
             CustomUser.Role.ACCOUNTANT,
         ]
 
+        # ---------------------------------------------
+        # TEACHER
+        # ---------------------------------------------
+
         if not allowed and user.role == CustomUser.Role.TEACHER:
-            allowed = student.classroom_id in _teacher_classroom_ids(user)
+            allowed = (
+                student.classroom_id
+                in _teacher_classroom_ids(user)
+            )
+
+        # ---------------------------------------------
+        # PARENT
+        # ---------------------------------------------
 
         if not allowed and user.role == CustomUser.Role.PARENT:
+
             parent_profile = ParentProfile.objects.filter(
                 user=user
             ).first()
+
             allowed = bool(
-                parent_profile and student.parent_id == parent_profile.id
+                parent_profile
+                and student.parent_id == parent_profile.id
             )
 
         if not allowed:
@@ -241,14 +232,9 @@ class StudentDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
         serializer = StudentSerializer(
             student,
-            context={"request": request}
+            context={"request": request},
         )
 
         return Response(serializer.data)
@@ -261,140 +247,107 @@ class StudentDetailView(APIView):
 
 class StudentCreateView(APIView):
 
-<<<<<<< HEAD
-    permission_classes = [IsAdminOrCoordinatorForStudents]
-=======
-<<<<<<< HEAD
-    permission_classes = [IsAdminOrCoordinatorForStudents]
-=======
-    permission_classes = [IsAuthenticated]
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
+    permission_classes = [
+        IsAdminOrCoordinatorForStudents
+    ]
 
     def post(self, request):
 
         serializer = StudentSerializer(
             data=request.data,
-            context={"request": request}
+            context={"request": request},
         )
 
-        if serializer.is_valid():
+        serializer.is_valid(raise_exception=True)
 
-            student = serializer.save()
-
-            return Response(
-                StudentSerializer(
-                    student,
-                    context={"request": request}
-                ).data,
-                status=status.HTTP_201_CREATED
-            )
+        student = serializer.save()
 
         return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
+            StudentSerializer(
+                student,
+                context={"request": request},
+            ).data,
+            status=status.HTTP_201_CREATED,
         )
 
 
 # =====================================================
 # UPDATE STUDENT
-# PUT/PATCH /api/students/update/<int:pk>/
+# PUT/PATCH /api/students/update/<pk>/
 # =====================================================
 
 class StudentUpdateView(APIView):
 
-<<<<<<< HEAD
-    permission_classes = [IsAdminOrCoordinatorForStudents]
-=======
-<<<<<<< HEAD
-    permission_classes = [IsAdminOrCoordinatorForStudents]
-=======
-    permission_classes = [IsAuthenticated]
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
+    permission_classes = [
+        IsAdminOrCoordinatorForStudents
+    ]
 
     def put(self, request, pk):
 
         student = get_object_or_404(
             Student,
-            pk=pk
+            pk=pk,
         )
 
         serializer = StudentSerializer(
             student,
             data=request.data,
-            context={"request": request}
+            context={"request": request},
         )
 
-        if serializer.is_valid():
+        serializer.is_valid(raise_exception=True)
 
-            student = serializer.save()
-
-            return Response(
-                StudentSerializer(
-                    student,
-                    context={"request": request}
-                ).data
-            )
+        student = serializer.save()
 
         return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
+            StudentSerializer(
+                student,
+                context={"request": request},
+            ).data
         )
 
     def patch(self, request, pk):
 
         student = get_object_or_404(
             Student,
-            pk=pk
+            pk=pk,
         )
 
         serializer = StudentSerializer(
             student,
             data=request.data,
             partial=True,
-            context={"request": request}
+            context={"request": request},
         )
 
-        if serializer.is_valid():
+        serializer.is_valid(raise_exception=True)
 
-            student = serializer.save()
-
-            return Response(
-                StudentSerializer(
-                    student,
-                    context={"request": request}
-                ).data
-            )
+        student = serializer.save()
 
         return Response(
-            serializer.errors,
-            status=status.HTTP_400_BAD_REQUEST
+            StudentSerializer(
+                student,
+                context={"request": request},
+            ).data
         )
 
 
 # =====================================================
 # DELETE STUDENT
-# DELETE /api/students/delete/<int:pk>/
+# DELETE /api/students/delete/<pk>/
 # =====================================================
 
 class StudentDeleteView(APIView):
 
-<<<<<<< HEAD
-    permission_classes = [IsAdminOrCoordinatorForStudents]
-=======
-<<<<<<< HEAD
-    permission_classes = [IsAdminOrCoordinatorForStudents]
-=======
-    permission_classes = [IsAuthenticated]
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
+    permission_classes = [
+        IsAdminOrCoordinatorForStudents
+    ]
 
     def delete(self, request, pk):
 
         student = get_object_or_404(
             Student,
-            pk=pk
+            pk=pk,
         )
 
         student.delete()
@@ -403,7 +356,7 @@ class StudentDeleteView(APIView):
             {
                 "message": "Student deleted successfully."
             },
-            status=status.HTTP_204_NO_CONTENT
+            status=status.HTTP_204_NO_CONTENT,
         )
 
 
@@ -414,38 +367,23 @@ class StudentDeleteView(APIView):
 
 class StudentTransferView(APIView):
 
-<<<<<<< HEAD
-    permission_classes = [IsAdminOrCoordinatorForStudents]
-=======
-<<<<<<< HEAD
-    permission_classes = [IsAdminOrCoordinatorForStudents]
-=======
-    permission_classes = [IsAuthenticated]
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
+    permission_classes = [
+        IsAdminOrCoordinatorForStudents
+    ]
 
     @transaction.atomic
     def post(self, request):
 
         serializer = StudentTransferSerializer(
             data=request.data,
-            context={"request": request}
+            context={"request": request},
         )
 
-        if not serializer.is_valid():
-
-            return Response(
-                serializer.errors,
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        serializer.is_valid(raise_exception=True)
 
         transfer = serializer.save(
             transferred_by=request.user
         )
-
-        # =============================================
-        # Update student's classroom
-        # =============================================
 
         student = transfer.student
 
@@ -461,9 +399,9 @@ class StudentTransferView(APIView):
         return Response(
             StudentTransferSerializer(
                 transfer,
-                context={"request": request}
+                context={"request": request},
             ).data,
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -478,36 +416,36 @@ class StudentTransferListView(APIView):
 
     def get(self, request):
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
         if request.user.role not in [
             CustomUser.Role.SUPER_ADMIN,
             CustomUser.Role.ACADEMIC_COORDINATOR,
             CustomUser.Role.ACCOUNTANT,
         ]:
             return Response(
-                {"error": "You do not have permission to view transfers."},
+                {
+                    "error": (
+                        "You do not have permission "
+                        "to view transfers."
+                    )
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
-        transfers = StudentTransfer.objects.select_related(
-            "student",
-            "from_classroom",
-            "to_classroom",
-            "transferred_by",
-        ).all()
+        transfers = (
+            StudentTransfer.objects
+            .select_related(
+                "student",
+                "from_classroom",
+                "to_classroom",
+                "transferred_by",
+            )
+            .all()
+        )
 
         serializer = StudentTransferSerializer(
             transfers,
             many=True,
-            context={"request": request}
+            context={"request": request},
         )
 
         return Response(serializer.data)
@@ -515,7 +453,7 @@ class StudentTransferListView(APIView):
 
 # =====================================================
 # TRANSFER DETAIL
-# GET /api/students/transfers/<int:pk>/
+# GET /api/students/transfers/<pk>/
 # =====================================================
 
 class StudentTransferDetailView(APIView):
@@ -524,25 +462,21 @@ class StudentTransferDetailView(APIView):
 
     def get(self, request, pk):
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
         if request.user.role not in [
             CustomUser.Role.SUPER_ADMIN,
             CustomUser.Role.ACADEMIC_COORDINATOR,
             CustomUser.Role.ACCOUNTANT,
         ]:
             return Response(
-                {"error": "You do not have permission to view transfers."},
+                {
+                    "error": (
+                        "You do not have permission "
+                        "to view transfers."
+                    )
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
         transfer = get_object_or_404(
             StudentTransfer.objects.select_related(
                 "student",
@@ -550,12 +484,12 @@ class StudentTransferDetailView(APIView):
                 "to_classroom",
                 "transferred_by",
             ),
-            pk=pk
+            pk=pk,
         )
 
         serializer = StudentTransferSerializer(
             transfer,
-            context={"request": request}
+            context={"request": request},
         )
 
         return Response(serializer.data)
@@ -563,7 +497,7 @@ class StudentTransferDetailView(APIView):
 
 # =====================================================
 # PARENT CHILDREN
-# GET /api/dashboard/parent/children/
+# GET /api/students/parent/children/
 # =====================================================
 
 class ParentChildrenView(APIView):
@@ -572,31 +506,19 @@ class ParentChildrenView(APIView):
 
     def get(self, request):
 
-        # =================================================
-        # STEP 1: FIND PARENT PROFILE FOR LOGGED-IN USER
-        # =================================================
-
         parent = ParentProfile.objects.filter(
             user=request.user
         ).first()
-
-        # =================================================
-        # NO PARENT PROFILE
-        # =================================================
 
         if not parent:
             return Response(
                 {
                     "children_count": 0,
                     "children": [],
-                    "message": "Parent profile not found."
+                    "message": "Parent profile not found.",
                 },
-                status=200
+                status=status.HTTP_200_OK,
             )
-
-        # =================================================
-        # STEP 2: GET ONLY THIS PARENT'S CHILDREN
-        # =================================================
 
         children = (
             Student.objects
@@ -612,21 +534,11 @@ class ParentChildrenView(APIView):
             )
         )
 
-        # =================================================
-        # STEP 3: SERIALIZE CHILDREN
-        # =================================================
-
         serializer = StudentListSerializer(
             children,
             many=True,
-            context={
-                "request": request
-            }
+            context={"request": request},
         )
-
-        # =================================================
-        # STEP 4: RETURN CHILDREN
-        # =================================================
 
         return Response(
             {
@@ -634,21 +546,13 @@ class ParentChildrenView(APIView):
                 "children_count": children.count(),
                 "children": serializer.data,
             },
-            status=200
-<<<<<<< HEAD
+            status=status.HTTP_200_OK,
         )
 
+
 # =====================================================
-# MY STUDENT RECORD  (logged-in STUDENT role)
+# MY STUDENT RECORD
 # GET /api/students/me/
-#
-# This is the endpoint the STUDENT-facing dashboard should
-# call to find out its own classroom, class teacher, parent
-# link, etc. Previously nothing connected a STUDENT login
-# (CustomUser + StudentProfile) to the academic Student
-# record (classroom, parent) — so a logged-in student had no
-# way to ask "what class am I in", which is exactly the
-# "student not assigned to class" symptom.
 # =====================================================
 
 class MyStudentRecordView(APIView):
@@ -661,24 +565,34 @@ class MyStudentRecordView(APIView):
 
         if user.role != CustomUser.Role.STUDENT:
             return Response(
-                {"error": "This endpoint is only for student accounts."},
+                {
+                    "error": (
+                        "This endpoint is only for "
+                        "student accounts."
+                    )
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        student = Student.objects.select_related(
-            "parent__user",
-            "classroom",
-            "classroom__class_teacher__user",
-        ).filter(user=user).first()
+        student = (
+            Student.objects
+            .select_related(
+                "parent__user",
+                "classroom",
+                "classroom__class_teacher__user",
+            )
+            .filter(user=user)
+            .first()
+        )
 
         if not student:
             return Response(
                 {
                     "linked": False,
                     "message": (
-                        "Your login account has not been linked to a "
-                        "classroom yet. Please contact the academic "
-                        "coordinator."
+                        "Your login account has not been "
+                        "linked to a classroom yet. Please "
+                        "contact the academic coordinator."
                     ),
                 },
                 status=status.HTTP_200_OK,
@@ -692,34 +606,41 @@ class MyStudentRecordView(APIView):
         data = serializer.data
         data["linked"] = True
 
-        return Response(data, status=status.HTTP_200_OK)
+        return Response(
+            data,
+            status=status.HTTP_200_OK,
+        )
 
 
 # =====================================================
 # UNLINKED STUDENT LOGIN ACCOUNTS
 # GET /api/students/unlinked-users/
-#
-# Returns CustomUser accounts with role=STUDENT that do NOT
-# yet have a matching academic Student record. Used to
-# populate the "link to existing login account" dropdown on
-# the Add/Edit Student screen, instead of leaving that
-# relationship to be guessed/duplicated by hand.
 # =====================================================
 
 class UnlinkedStudentUsersView(APIView):
 
-    permission_classes = [IsAdminOrCoordinatorForStudents]
+    permission_classes = [
+        IsAdminOrCoordinatorForStudents
+    ]
 
     def get(self, request):
 
-        users = CustomUser.objects.filter(
-            role=CustomUser.Role.STUDENT,
-            student_record__isnull=True,
-        ).order_by("first_name", "last_name", "username")
+        users = (
+            CustomUser.objects
+            .filter(
+                role=CustomUser.Role.STUDENT,
+                student_record__isnull=True,
+            )
+            .order_by(
+                "first_name",
+                "last_name",
+                "username",
+            )
+        )
 
-        serializer = UserSerializer(users, many=True)
+        serializer = UserSerializer(
+            users,
+            many=True,
+        )
 
         return Response(serializer.data)
-=======
-        )
->>>>>>> origin/main

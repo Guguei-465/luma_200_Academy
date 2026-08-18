@@ -20,18 +20,19 @@ class Student(models.Model):
         TRANSFERRED = "Transferred", "Transferred"
         GRADUATED = "Graduated", "Graduated"
 
-<<<<<<< HEAD
     # =================================================
     # LOGIN ACCOUNT LINK
     #
-    # Connects this academic record (classroom, parent,
-    # status, etc.) to the CustomUser the student logs in
-    # with (role=STUDENT). Nullable because a student can
-    # exist in the roster before a login account is issued,
-    # and a login account can exist before the coordinator
-    # enrolls them into a classroom — but once both exist,
-    # this is the field every "my class" / "my profile"
-    # lookup for the STUDENT role relies on.
+    # Connects this academic record to the CustomUser
+    # account used by the student to log in.
+    #
+    # Nullable because:
+    # - A student can exist before a login account is created.
+    # - A login account can exist before the student is fully
+    #   enrolled into the academic system.
+    #
+    # Once both exist, this field is used for student-specific
+    # profile, class, results, timetable and other lookups.
     # =================================================
     user = models.OneToOneField(
         CustomUser,
@@ -42,8 +43,6 @@ class Student(models.Model):
         limit_choices_to={"role": "STUDENT"},
     )
 
-=======
->>>>>>> origin/main
     admission_number = models.CharField(
         max_length=20,
         unique=True,

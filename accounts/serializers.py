@@ -12,31 +12,24 @@ from .models import (
 User = get_user_model()
 
 
-# ==========================================
+# ============================================================
 # User Serializer
-# ==========================================
+# ============================================================
+
 class UserSerializer(serializers.ModelSerializer):
 
-<<<<<<< HEAD
-    # =================================================
-    # Whether this user's role-specific profile record
-    # (TeacherProfile / ParentProfile / StudentProfile /
-    # AccountantProfile / AcademicCoordinatorProfile)
-    # actually exists.
+    # ========================================================
+    # Whether this user's role-specific profile exists.
     #
     # SUPER_ADMIN has no separate profile model by design,
-    # so it is always reported as True (nothing missing).
-    #
-    # Lets the admin user list flag accounts that were
-    # created (or had their role changed) without their
-    # matching profile being filled in.
-    # =================================================
+    # so it is always considered to have a profile.
+    # ========================================================
+
     has_profile = serializers.SerializerMethodField()
 
-=======
->>>>>>> origin/main
     class Meta:
         model = User
+
         fields = [
             "id",
             "username",
@@ -47,16 +40,12 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "profile_picture",
             "is_active",
-<<<<<<< HEAD
             "has_profile",
-=======
->>>>>>> origin/main
             "created_at",
         ]
 
         read_only_fields = [
             "id",
-<<<<<<< HEAD
             "has_profile",
             "created_at",
         ]
@@ -67,25 +56,23 @@ class UserSerializer(serializers.ModelSerializer):
             "PARENT": "parent_profile",
             "TEACHER": "teacher_profile",
             "ACCOUNTANT": "accountant_profile",
-            "ACADEMIC_COORDINATOR": "academic_coordinator_profile",
+            "ACADEMIC_COORDINATOR": (
+                "academic_coordinator_profile"
+            ),
             "STUDENT": "student_profile",
         }.get(obj.role)
 
+        # SUPER_ADMIN does not have a separate profile model.
         if not profile_attr:
-            # SUPER_ADMIN — no profile model applies.
             return True
 
         return hasattr(obj, profile_attr)
 
-=======
-            "created_at",
-        ]
 
->>>>>>> origin/main
-
-# ==========================================
+# ============================================================
 # Registration Serializer
-# ==========================================
+# ============================================================
+
 class RegisterSerializer(serializers.ModelSerializer):
 
     password = serializers.CharField(
@@ -95,6 +82,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
+
         fields = [
             "username",
             "first_name",
@@ -107,7 +95,9 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
 
-        password = validated_data.pop("password")
+        password = validated_data.pop(
+            "password"
+        )
 
         user = User(**validated_data)
 
@@ -118,17 +108,20 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
-# ==========================================
+# ============================================================
 # Parent Profile Serializer
-# ==========================================
+# ============================================================
+
 class ParentProfileSerializer(serializers.ModelSerializer):
 
-    user = UserSerializer(read_only=True)
+    user = UserSerializer(
+        read_only=True
+    )
 
     # Parent user ID
     parent_user_id = serializers.IntegerField(
         source="user.id",
-        read_only=True
+        read_only=True,
     )
 
     # Parent display name
@@ -137,7 +130,7 @@ class ParentProfileSerializer(serializers.ModelSerializer):
     # Parent phone
     parent_phone = serializers.CharField(
         source="user.phone_number",
-        read_only=True
+        read_only=True,
     )
 
     # First / primary student ID
@@ -150,13 +143,18 @@ class ParentProfileSerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
 
     def get_parent_name(self, obj):
+
         if obj.user:
+
             full_name = (
                 f"{obj.user.first_name or ''} "
                 f"{obj.user.last_name or ''}"
             ).strip()
 
-            return full_name or obj.user.username
+            return (
+                full_name
+                or obj.user.username
+            )
 
         return ""
 
@@ -166,7 +164,9 @@ class ParentProfileSerializer(serializers.ModelSerializer):
 
         Useful when the parent has one child.
         """
+
         try:
+
             students = obj.children.all()
 
             first_student = students.first()
@@ -183,10 +183,16 @@ class ParentProfileSerializer(serializers.ModelSerializer):
         """
         Return IDs of ALL students linked to this parent.
         """
+
         try:
+
             return list(
-                obj.children.values_list("id", flat=True)
+                obj.children.values_list(
+                    "id",
+                    flat=True,
+                )
             )
+
         except Exception:
             return []
 
@@ -194,7 +200,9 @@ class ParentProfileSerializer(serializers.ModelSerializer):
         """
         Return useful information about every child.
         """
+
         try:
+
             students = obj.children.all()
 
             return [
@@ -206,11 +214,19 @@ class ParentProfileSerializer(serializers.ModelSerializer):
                     "admission_number": getattr(
                         student,
                         "admission_number",
-                        getattr(student, "admission_no", None)
+                        getattr(
+                            student,
+                            "admission_no",
+                            None,
+                        ),
                     ),
 
                     "name": (
-                        getattr(student, "name", None)
+                        getattr(
+                            student,
+                            "name",
+                            None,
+                        )
                         or
                         (
                             f"{getattr(student, 'first_name', '')} "
@@ -263,50 +279,52 @@ class ParentProfileSerializer(serializers.ModelSerializer):
         ]
 
 
-# ==========================================
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-# Teacher Profile Serializer (FULL — self-view/edit + admin-only detail)
-#
-# Includes sensitive fields (national_id, date_of_birth). Only ever
-# expose this to: the teacher themselves, or SUPER_ADMIN /
-# ACADEMIC_COORDINATOR in an admin-restricted view.
-<<<<<<< HEAD
-=======
-=======
+# ============================================================
 # Teacher Profile Serializer
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
-# ==========================================
-class TeacherProfileSerializer(serializers.ModelSerializer):
+#
+# Full serializer.
+#
+# Used for:
+# - Teacher's own profile
+# - Admin / Academic Coordinator views
+#
+# Sensitive fields such as national_id and date_of_birth
+# are included here.
+# ============================================================
 
-    user = UserSerializer(read_only=True)
+class TeacherProfileSerializer(
+    serializers.ModelSerializer
+):
+
+    user = UserSerializer(
+        read_only=True
+    )
 
     class Meta:
         model = TeacherProfile
         fields = "__all__"
 
 
-# ==========================================
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-# Teacher Profile Serializer (PUBLIC — dropdowns / cross-role listings)
+# ============================================================
+# Teacher Profile Public Serializer
 #
-# Used anywhere a non-admin authenticated user (e.g. building a class
-# dropdown) needs to see basic teacher info. Deliberately excludes
-# national_id and date_of_birth to avoid leaking PII to Parents,
-# Students, or other Teachers.
-# ==========================================
-class TeacherProfilePublicSerializer(serializers.ModelSerializer):
+# Used for dropdowns and cross-role listings where basic
+# teacher information is required.
+#
+# Sensitive fields are deliberately excluded.
+# ============================================================
 
-    user = UserSerializer(read_only=True)
+class TeacherProfilePublicSerializer(
+    serializers.ModelSerializer
+):
+
+    user = UserSerializer(
+        read_only=True
+    )
 
     class Meta:
         model = TeacherProfile
+
         fields = [
             "id",
             "user",
@@ -317,41 +335,51 @@ class TeacherProfilePublicSerializer(serializers.ModelSerializer):
         ]
 
 
-# ==========================================
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
+# ============================================================
 # Accountant Profile Serializer
-# ==========================================
-class AccountantProfileSerializer(serializers.ModelSerializer):
+# ============================================================
 
-    user = UserSerializer(read_only=True)
+class AccountantProfileSerializer(
+    serializers.ModelSerializer
+):
+
+    user = UserSerializer(
+        read_only=True
+    )
 
     class Meta:
         model = AccountantProfile
         fields = "__all__"
 
 
-# ==========================================
+# ============================================================
 # Academic Coordinator Serializer
-# ==========================================
-class AcademicCoordinatorProfileSerializer(serializers.ModelSerializer):
+# ============================================================
 
-    user = UserSerializer(read_only=True)
+class AcademicCoordinatorProfileSerializer(
+    serializers.ModelSerializer
+):
+
+    user = UserSerializer(
+        read_only=True
+    )
 
     class Meta:
         model = AcademicCoordinatorProfile
         fields = "__all__"
 
 
-# ==========================================
+# ============================================================
 # Student Profile Serializer
-# ==========================================
-class StudentProfileSerializer(serializers.ModelSerializer):
+# ============================================================
 
-    user = UserSerializer(read_only=True)
+class StudentProfileSerializer(
+    serializers.ModelSerializer
+):
+
+    user = UserSerializer(
+        read_only=True
+    )
 
     class Meta:
         model = StudentProfile
@@ -365,24 +393,11 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             "date_of_birth",
             "created_at",
             "updated_at",
-<<<<<<< HEAD
-        ]
-=======
-<<<<<<< HEAD
-        ]
-=======
         ]
 
-# ==========================================
-# Teacher Profile Serializer
-# ==========================================
-
-class TeacherProfileSerializer(serializers.ModelSerializer):
-
-    user = UserSerializer(read_only=True)
-
-    class Meta:
-        model = TeacherProfile
-        fields = "__all__"
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
+        read_only_fields = [
+            "id",
+            "user",
+            "created_at",
+            "updated_at",
+        ]

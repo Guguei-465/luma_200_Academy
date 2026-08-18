@@ -7,18 +7,27 @@ from .views import (
     AttendanceDetailView,
     StudentAttendanceHistoryView,
     TeacherAttendanceHistoryView,
-<<<<<<< HEAD
     AttendanceReportView,
-=======
->>>>>>> origin/main
 )
 
 
 urlpatterns = [
+    # ============================================================
+    # CREATE / LOAD ATTENDANCE SUBMISSION
+    # ============================================================
 
-    # ========================================================
-    # LOAD + SAVE ATTENDANCE
-    # ========================================================
+    path(
+        "submissions/create/",
+        AttendanceSubmissionCreateView.as_view(),
+        name="attendance-submission-create",
+    ),
+
+    # ============================================================
+    # MARK ATTENDANCE
+    #
+    # GET  -> Load students
+    # POST -> Save + finalize attendance
+    # ============================================================
 
     path(
         "mark/",
@@ -26,21 +35,12 @@ urlpatterns = [
         name="mark-attendance",
     ),
 
-    # ========================================================
-    # CREATE TODAY'S ATTENDANCE SESSION
-    # ========================================================
-
-    path(
-        "create/",
-        AttendanceSubmissionCreateView.as_view(),
-        name="attendance-create",
-    ),
-
-    # ========================================================
-    # LEGACY ENDPOINT
+    # ============================================================
+    # SUBMIT ATTENDANCE
     #
-    # Not required by the new workflow.
-    # ========================================================
+    # Kept for backward compatibility.
+    # Attendance is already finalized by mark/.
+    # ============================================================
 
     path(
         "submit/",
@@ -48,46 +48,44 @@ urlpatterns = [
         name="submit-attendance",
     ),
 
-    # ========================================================
-    # ADMIN / COORDINATOR DETAIL
-    # ========================================================
+    # ============================================================
+    # ATTENDANCE DETAIL
+    # Admin / Academic Coordinator
+    # ============================================================
 
     path(
-        "<int:submission_id>/",
+        "detail/<int:submission_id>/",
         AttendanceDetailView.as_view(),
         name="attendance-detail",
     ),
 
-    # ========================================================
-    # STUDENT HISTORY
-    # ========================================================
+    # ============================================================
+    # STUDENT ATTENDANCE HISTORY
+    # ============================================================
 
     path(
-        "student/<int:student_id>/",
+        "student/<int:student_id>/history/",
         StudentAttendanceHistoryView.as_view(),
         name="student-attendance-history",
     ),
 
-    # ========================================================
-    # TEACHER HISTORY
-    # ========================================================
+    # ============================================================
+    # TEACHER ATTENDANCE HISTORY
+    # ============================================================
 
     path(
         "teacher/history/",
         TeacherAttendanceHistoryView.as_view(),
         name="teacher-attendance-history",
     ),
-<<<<<<< HEAD
 
-    # ========================================================
-    # ADMIN / COORDINATOR REPORT
-    # ========================================================
+    # ============================================================
+    # ADMIN ATTENDANCE REPORT
+    # ============================================================
 
     path(
         "report/",
         AttendanceReportView.as_view(),
         name="attendance-report",
     ),
-=======
->>>>>>> origin/main
 ]

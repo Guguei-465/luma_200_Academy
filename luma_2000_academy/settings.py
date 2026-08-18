@@ -9,147 +9,174 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
-import os
-from decouple import config
+
 from pathlib import Path
+from datetime import timedelta
+
+from decouple import config
+
+
+# ============================================================
+# BASE DIRECTORY
+# ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
+# ============================================================
+# SECURITY
+# ============================================================
 
 SECRET_KEY = config("SECRET_KEY")
+
 DEBUG = config("DEBUG", default=False, cast=bool)
+
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="").split(",")
 
-# users to have accounts
+# Custom user model
 AUTH_USER_MODEL = "accounts.CustomUser"
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
+
+# ============================================================
+# CORS
+# ============================================================
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-    "https://ryacksonfungo.alwaysdata.net",
-    "https://luma-six-xi.vercel.app",
     "http://127.0.0.1:5173",
-]
-=======
->>>>>>> origin/main
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:5173",
-#     "http://127.0.0.1:5173",
-# ]
-<<<<<<< HEAD
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 
+    # Backend / production
+    "https://ryacksonfungo.alwaysdata.net",
 
-
-# Application definition
-
-INSTALLED_APPS = [
-    'django_filters',
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'django_rest_passwordreset',
-    'rest_framework',
-    'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist',
-    'drf_spectacular',
-    'corsheaders',
-    
-
-    # apps
-    'notifiations',
-    'assignments',
-    'students',
-    'subjects',
-    'fees',
-    'classes',
-    'accounts',
-    'parents',
-    'attendance',
-    'exams',
-    'results',
-    'timetable',
-    'anouncements',
-    'dashboard',
-    'reports',
-    
-    
-]
-
-# Email config (critical — sends reset links)
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com' # or your provider
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'your-school-email@gmail.com'
-EMAIL_HOST_PASSWORD = 'your-app-password' # use app password for Gmail
-DEFAULT_FROM_EMAIL = 'Luma 2000 Academy <no-reply@school.ac.ke>'
-
-# Optional: customize reset token expiry (default 24h)
-DJANGO_REST_PASSWORDRESET_TOKEN_EXPIRY_TIME = 3600 # 1 hour in seconds
-
-MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Vercel frontends
+    "https://luma-six-xi.vercel.app",
+    "https://school-management-system-chi-eight.vercel.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Do NOT enable this together with CORS_ALLOWED_ORIGINS
 # CORS_ALLOW_ALL_ORIGINS = True
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-    "https://luma-six-xi.vercel.app",
-=======
-    "https://school-management-system-chi-eight.vercel.app/",
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
-    "https://ryacksonfungo.alwaysdata.net",
+
+# ============================================================
+# APPLICATIONS
+# ============================================================
+
+INSTALLED_APPS = [
+    "django_filters",
+
+    # Django
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+
+    # Third-party
+    "django_rest_passwordreset",
+    "rest_framework",
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
+    "drf_spectacular",
+    "corsheaders",
+
+    # Luma 2000 Academy apps
+    "notifiations",
+    "assignments",
+    "students",
+    "subjects",
+    "fees",
+    "classes",
+    "accounts",
+    "parents",
+    "attendance",
+    "exams",
+    "results",
+    "timetable",
+    "anouncements",
+    "dashboard",
+    "reports",
 ]
 
-ROOT_URLCONF = 'luma_2000_academy.urls'
+
+# ============================================================
+# EMAIL CONFIGURATION
+# ============================================================
+
+# Critical: used for password reset emails
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+EMAIL_HOST_USER = "your-school-email@gmail.com"
+EMAIL_HOST_PASSWORD = "your-app-password"
+
+DEFAULT_FROM_EMAIL = "Luma 2000 Academy <no-reply@school.ac.ke>"
+
+# Password reset token expiry
+# 3600 seconds = 1 hour
+DJANGO_REST_PASSWORDRESET_TOKEN_EXPIRY_TIME = 3600
+
+
+# ============================================================
+# MIDDLEWARE
+# ============================================================
+
+MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
+
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+
+# ============================================================
+# URL CONFIGURATION
+# ============================================================
+
+ROOT_URLCONF = "luma_2000_academy.urls"
+
+
+# ============================================================
+# TEMPLATES
+# ============================================================
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'luma_2000_academy.wsgi.application'
+
+# ============================================================
+# WSGI
+# ============================================================
+
+WSGI_APPLICATION = "luma_2000_academy.wsgi.application"
 
 
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+# ============================================================
+# DATABASE
+# ============================================================
 
 DATABASES = {
     "default": {
@@ -163,89 +190,124 @@ DATABASES = {
 }
 
 
-# Password validation
-# https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
+# ============================================================
+# PASSWORD VALIDATION
+# ============================================================
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "UserAttributeSimilarityValidator"
+        ),
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "MinimumLengthValidator"
+        ),
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "CommonPasswordValidator"
+        ),
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "NumericPasswordValidator"
+        ),
     },
 ]
 
 
-# Internationalization
-# https://docs.djangoproject.com/en/4.2/topics/i18n/
+# ============================================================
+# INTERNATIONALIZATION
+# ============================================================
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
+# ============================================================
+# STATIC FILES
+# ============================================================
 
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_URL = "static/"
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
- 
 
-# token
+# ============================================================
+# DEFAULT PRIMARY KEY
+# ============================================================
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# ============================================================
+# DJANGO REST FRAMEWORK
+# ============================================================
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
     ],
+
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ],
+
     "DEFAULT_THROTTLE_RATES": {
         "anon": "100/day",
         "user": "1000/day",
     },
-}   
+}
 
-# JWT settings
-from datetime import timedelta
+
+# ============================================================
+# JWT SETTINGS
+# ============================================================
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(days=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=60),
+
     "ROTATE_REFRESH_TOKENS": False,
+
     "BLACKLIST_AFTER_ROTATION": True,
 }
 
 
-# ==========================================
-# Safaricom Daraja Configuration
-# ==========================================
+# ============================================================
+# SAFARICOM DARAJA / M-PESA CONFIGURATION
+# ============================================================
 
 MPESA_ENVIRONMENT = config("MPESA_ENVIRONMENT")
+
 MPESA_CONSUMER_KEY = config("MPESA_CONSUMER_KEY")
+
 MPESA_CONSUMER_SECRET = config("MPESA_CONSUMER_SECRET")
+
 MPESA_SHORTCODE = config("MPESA_SHORTCODE")
+
 MPESA_PASSKEY = config("MPESA_PASSKEY")
+
 MPESA_CALLBACK_URL = config("MPESA_CALLBACK_URL")

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+
 from .models import Timetable
 
 
@@ -10,12 +11,12 @@ class TimetableSerializer(serializers.ModelSerializer):
 
     teacher_name = serializers.CharField(
         source="assignment.teacher.user.get_full_name",
-        read_only=True
+        read_only=True,
     )
 
     subject_name = serializers.CharField(
         source="assignment.subject.name",
-        read_only=True
+        read_only=True,
     )
 
     classroom_name = serializers.SerializerMethodField()
@@ -26,17 +27,17 @@ class TimetableSerializer(serializers.ModelSerializer):
 
     teacher_id = serializers.IntegerField(
         source="assignment.teacher.id",
-        read_only=True
+        read_only=True,
     )
 
     subject_id = serializers.IntegerField(
         source="assignment.subject.id",
-        read_only=True
+        read_only=True,
     )
 
     classroom_id = serializers.IntegerField(
         source="assignment.classroom.id",
-        read_only=True
+        read_only=True,
     )
 
     # =====================================================
@@ -45,12 +46,12 @@ class TimetableSerializer(serializers.ModelSerializer):
 
     grade = serializers.CharField(
         source="assignment.classroom.grade",
-        read_only=True
+        read_only=True,
     )
 
     stream = serializers.CharField(
         source="assignment.classroom.stream",
-        read_only=True
+        read_only=True,
     )
 
     # =====================================================
@@ -59,7 +60,7 @@ class TimetableSerializer(serializers.ModelSerializer):
 
     day_display = serializers.CharField(
         source="get_day_display",
-        read_only=True
+        read_only=True,
     )
 
     # =====================================================
@@ -72,42 +73,26 @@ class TimetableSerializer(serializers.ModelSerializer):
         if hasattr(classroom, "name") and classroom.name:
             return classroom.name
 
-        grade = getattr(
-            classroom,
-            "grade",
-            ""
-        )
-
-        stream = getattr(
-            classroom,
-            "stream",
-            ""
-        )
+        grade = getattr(classroom, "grade", "")
+        stream = getattr(classroom, "stream", "")
 
         name = f"{grade} {stream}".strip()
 
         return name or str(classroom)
 
     # =====================================================
-    # META
-    # =====================================================
-
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-    # =====================================================
     # VALIDATION
-    #
-    # Timetable.clean() already enforces end_time > start_time,
-    # but nothing ever calls full_clean() (no save() override),
-    # so that check was dead code — a client could POST an entry
-    # with end_time before start_time and it would save fine.
-    # Spec section 12 explicitly requires this, so enforcing it
-    # here where DRF will actually run it.
     # =====================================================
 
     def validate(self, attrs):
+        """
+        Ensure that the timetable end time is after
+        the start time.
+
+        This validation is done here because Django's
+        model clean() method is not automatically called
+        by DRF serializers.
+        """
 
         start_time = attrs.get(
             "start_time",
@@ -120,17 +105,16 @@ class TimetableSerializer(serializers.ModelSerializer):
         )
 
         if start_time and end_time and end_time <= start_time:
-            raise serializers.ValidationError(
-                {"end_time": "End time must be later than start time."}
-            )
+            raise serializers.ValidationError({
+                "end_time": "End time must be later than start time."
+            })
 
         return attrs
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
+    # =====================================================
+    # META
+    # =====================================================
+
     class Meta:
         model = Timetable
 
@@ -170,12 +154,16 @@ class TimetableSerializer(serializers.ModelSerializer):
             "id",
             "created_at",
             "updated_at",
+
             "teacher_id",
             "teacher_name",
+
             "subject_id",
             "subject_name",
+
             "classroom_id",
             "classroom_name",
+
             "grade",
             "stream",
-        ]
+        ] 

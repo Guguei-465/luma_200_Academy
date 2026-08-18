@@ -189,9 +189,9 @@ class FeePayment(models.Model):
         related_name="received_payments",
     )
 
-    # ==========================
-    # Daraja Fields
-    # ==========================
+    # =================================================
+    # DARAJA / M-PESA FIELDS
+    # =================================================
 
     phone_number = models.CharField(
         max_length=15,
@@ -204,21 +204,15 @@ class FeePayment(models.Model):
         help_text="Admission number or school payment reference.",
     )
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
     notes = models.TextField(
         blank=True,
         default="",
-        help_text="Free-text note entered by the accountant recording the payment.",
+        help_text=(
+            "Free-text note entered by the accountant "
+            "recording the payment."
+        ),
     )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
     mpesa_receipt = models.CharField(
         max_length=50,
         unique=True,

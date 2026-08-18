@@ -3,14 +3,7 @@ from django.utils import timezone
 
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
-<<<<<<< HEAD
 from rest_framework.exceptions import PermissionDenied
-=======
-<<<<<<< HEAD
-from rest_framework.exceptions import PermissionDenied
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -63,7 +56,6 @@ from .services import (
 class GradeScaleViewSet(viewsets.ModelViewSet):
 
     queryset = GradeScale.objects.all()
-
     serializer_class = GradeScaleSerializer
 
     permission_classes = [
@@ -79,7 +71,6 @@ class GradeScaleViewSet(viewsets.ModelViewSet):
 class AssessmentTypeViewSet(viewsets.ModelViewSet):
 
     queryset = AssessmentType.objects.all()
-
     serializer_class = AssessmentTypeSerializer
 
     permission_classes = [
@@ -109,14 +100,8 @@ class AssessmentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-        # A Teacher (as opposed to Academic Coordinator) must be
-        # assigned to the classroom/subject they're creating an
-        # assessment for — otherwise a teacher could fabricate
-        # assessments for classes they don't teach.
+        # Teachers can only create assessments for
+        # classes/subjects assigned to them.
         if getattr(self.request.user, "role", None) == "TEACHER":
 
             from assignments.models import TeacherAssignment
@@ -136,11 +121,6 @@ class AssessmentViewSet(viewsets.ModelViewSet):
                     "You are not assigned to this class/subject."
                 )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
         serializer.save(
             created_by=self.request.user
         )
@@ -163,6 +143,7 @@ class LearningOutcomeViewSet(viewsets.ModelViewSet):
         IsAuthenticated,
         IsTeacherOrAcademicCoordinator,
     ]
+
 
 # =====================================================
 # REPORT COMMENTS
@@ -203,12 +184,9 @@ class ResultSubmissionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-        # Same T2 assignment check for teachers creating a
-        # ResultSubmission directly against an assessment.
+        # Teachers can only create submissions for
+        # assessments belonging to their assigned
+        # class and subject.
         if getattr(self.request.user, "role", None) == "TEACHER":
 
             from assignments.models import TeacherAssignment
@@ -229,11 +207,6 @@ class ResultSubmissionViewSet(viewsets.ModelViewSet):
                         "You are not assigned to this class/subject."
                     )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
         serializer.save(
             submitted_by=self.request.user
         )
@@ -273,7 +246,6 @@ class ResultSubmissionViewSet(viewsets.ModelViewSet):
         )
 
         submission.submitted_by = request.user
-
         submission.submitted_at = timezone.now()
 
         submission.save(
@@ -287,9 +259,7 @@ class ResultSubmissionViewSet(viewsets.ModelViewSet):
 
         return Response(
             {
-                "message": (
-                    "Results submitted successfully."
-                )
+                "message": "Results submitted successfully."
             },
             status=status.HTTP_200_OK,
         )
@@ -331,7 +301,6 @@ class ResultSubmissionViewSet(viewsets.ModelViewSet):
             )
 
             submission.approved_by = request.user
-
             submission.approved_at = timezone.now()
 
             submission.save(
@@ -342,10 +311,6 @@ class ResultSubmissionViewSet(viewsets.ModelViewSet):
                     "updated_at",
                 ]
             )
-
-            # -----------------------------------------
-            # Process the complete submission
-            # -----------------------------------------
 
             process_submission(submission)
 
@@ -410,9 +375,7 @@ class ResultSubmissionViewSet(viewsets.ModelViewSet):
 
         return Response(
             {
-                "message": (
-                    "Results returned successfully."
-                )
+                "message": "Results returned successfully."
             },
             status=status.HTTP_200_OK,
         )
@@ -441,29 +404,18 @@ class ResultViewSet(viewsets.ModelViewSet):
     ]
 
     # =================================================
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
     # SECURITY HELPER
-    #
-    # SPEC (T2 — Marks Entry Security):
-    #   "John posts marks -> Grade 2 B, Science -> 403 Forbidden"
-    #
-    # DRF only calls has_object_permission() for actions that
-    # load an existing object (retrieve/update/destroy). It is
-    # NEVER called for create/bulk, since there is no object yet.
-    # IsAssignedTeacher.has_permission() only checks "is this a
-    # teacher", not "is this teacher assigned to this class and
-    # subject" — so without this explicit check, ANY teacher could
-    # post marks for ANY class/subject. This closes that gap.
     # =================================================
 
     def _verify_teacher_assigned_to_submission(self, submission):
 
         from assignments.models import TeacherAssignment
 
-        assessment = getattr(submission, "assessment", None)
+        assessment = getattr(
+            submission,
+            "assessment",
+            None,
+        )
 
         if assessment is None:
             raise PermissionDenied(
@@ -483,40 +435,27 @@ class ResultViewSet(viewsets.ModelViewSet):
             )
 
     # =================================================
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
     # CREATE
     # =================================================
 
     def perform_create(self, serializer):
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-        submission = serializer.validated_data.get("submission")
+        submission = serializer.validated_data.get(
+            "submission"
+        )
 
-        self._verify_teacher_assigned_to_submission(submission)
+        # Only teachers need the assignment check.
+        # Academic coordinators/admins are allowed
+        # according to the configured permission classes.
+        if getattr(self.request.user, "role", None) == "TEACHER":
+            self._verify_teacher_assigned_to_submission(
+                submission
+            )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
         result = serializer.save(
             entered_by=self.request.user,
             last_modified_by=self.request.user,
         )
-
-        # ---------------------------------------------
-        # Process immediately
-        #
-        # This is safe because approved submissions
-        # are protected by the serializer/permissions.
-        # ---------------------------------------------
 
         process_result(result)
 
@@ -531,7 +470,6 @@ class ResultViewSet(viewsets.ModelViewSet):
             "partial_update",
             "destroy",
         ]:
-
             return [
                 IsAuthenticated(),
                 IsAssignedTeacherObject(),
@@ -716,29 +654,14 @@ class ResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # ---------------------------------------------
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-        # SECURITY (T2) — see _verify_teacher_assigned_to_submission
-        # above. Same gap applies here: this is the endpoint the
-        # marks-entry screen actually calls, and without this check
-        # any teacher could bulk-post marks for a class/subject they
-        # don't teach.
-        # ---------------------------------------------
+        # Teachers can only bulk-enter results
+        # for their assigned class/subject.
+        if getattr(self.request.user, "role", None) == "TEACHER":
+            self._verify_teacher_assigned_to_submission(
+                submission
+            )
 
-        self._verify_teacher_assigned_to_submission(submission)
-
-        # ---------------------------------------------
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
-        # Approved submissions are locked
-        # ---------------------------------------------
-
+        # Approved submissions are locked.
         if (
             submission.approval_status
             == ResultSubmission.ApprovalStatus.APPROVED
@@ -774,19 +697,11 @@ class ResultViewSet(viewsets.ModelViewSet):
                                 "remarks",
                                 "",
                             ),
-                            "entered_by": (
-                                request.user
-                            ),
-                            "last_modified_by": (
-                                request.user
-                            ),
+                            "entered_by": request.user,
+                            "last_modified_by": request.user,
                         },
                     )
                 )
-
-                # -------------------------------------
-                # Process this result
-                # -------------------------------------
 
                 process_result(result)
 
@@ -953,25 +868,17 @@ class StudentTermResultViewSet(
                     else None
                 ),
 
-                "cbc_code": (
-                    term_result.cbc_code
-                ),
+                "cbc_code": term_result.cbc_code,
 
                 "cbc_description": (
                     term_result.cbc_description
                 ),
 
-                "total_marks": (
-                    term_result.total_marks
-                ),
+                "total_marks": term_result.total_marks,
 
-                "average_marks": (
-                    term_result.average_marks
-                ),
+                "average_marks": term_result.average_marks,
 
-                "position": (
-                    term_result.position
-                ),
+                "position": term_result.position,
 
                 "total_subjects": (
                     term_result.total_subjects
@@ -1024,9 +931,7 @@ class StudentReportCardAPIView(APIView):
 
             return Response(
                 {
-                    "detail": (
-                        "Student not found."
-                    )
+                    "detail": "Student not found."
                 },
                 status=status.HTTP_404_NOT_FOUND,
             )
@@ -1127,17 +1032,11 @@ class StudentReportCardAPIView(APIView):
                 {
                     "id": item.id,
 
-                    "subject": (
-                        item.subject.name
-                    ),
+                    "subject": item.subject.name,
 
-                    "total_score": (
-                        item.total_score
-                    ),
+                    "total_score": item.total_score,
 
-                    "average_score": (
-                        item.average_score
-                    ),
+                    "average_score": item.average_score,
 
                     "grade": (
                         item.grade.level
@@ -1145,9 +1044,7 @@ class StudentReportCardAPIView(APIView):
                         else None
                     ),
 
-                    "cbc_code": (
-                        item.cbc_code
-                    ),
+                    "cbc_code": item.cbc_code,
 
                     "cbc_description": (
                         item.cbc_description
@@ -1188,13 +1085,9 @@ class StudentReportCardAPIView(APIView):
         if summary:
 
             summary_data = {
-                "total_marks": (
-                    summary.total_marks
-                ),
+                "total_marks": summary.total_marks,
 
-                "average_marks": (
-                    summary.average_marks
-                ),
+                "average_marks": summary.average_marks,
 
                 "overall_grade": (
                     summary.overall_grade.level
@@ -1202,17 +1095,13 @@ class StudentReportCardAPIView(APIView):
                     else None
                 ),
 
-                "cbc_code": (
-                    summary.cbc_code
-                ),
+                "cbc_code": summary.cbc_code,
 
                 "cbc_description": (
                     summary.cbc_description
                 ),
 
-                "position": (
-                    summary.position
-                ),
+                "position": summary.position,
 
                 "total_subjects": (
                     summary.total_subjects
@@ -1235,9 +1124,7 @@ class StudentReportCardAPIView(APIView):
             {
                 "student": student_data,
 
-                "academic_year": (
-                    academic_year
-                ),
+                "academic_year": academic_year,
 
                 "term": term,
 
@@ -1246,4 +1133,4 @@ class StudentReportCardAPIView(APIView):
                 "summary": summary_data,
             },
             status=status.HTTP_200_OK,
-        )
+        ) 

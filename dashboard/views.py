@@ -1,16 +1,37 @@
 from decimal import Decimal
+
 from django.utils import timezone
 from django.db.models import Count, Sum, Avg, Max, Min
 from django.shortcuts import get_object_or_404
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+
 from timetable.models import Timetable
 from anouncements.models import Announcement
-from dashboard.permissions import IsAcademicCoordinator, IsDashboardUser, IsSuperAdmin, IsTeacher
-from results.models import Result
+
+from dashboard.permissions import (
+    IsAcademicCoordinator,
+    IsDashboardUser,
+    IsTeacher,
+)
+
+from results.models import (
+    Result,
+    StudentResult,
+    StudentTermResult,
+    ResultSubmission,
+    Assessment,
+)
+
 from students.models import Student
-from assignments.models import TeacherProfile, TeacherAssignment
+
+from assignments.models import (
+    TeacherProfile,
+    TeacherAssignment,
+)
+
 from accounts.models import ParentProfile
 from classes.models import ClassRoom
 from subjects.models import Subject
@@ -18,7 +39,7 @@ from attendance.models import Attendance
 from fees.models import FeePayment, StudentFee
 from exams.models import Exam
 from notifiations.models import Notification
-from results.models import StudentResult, StudentTermResult, ResultSubmission, Assessment
+
 from .serializers import (
     AttendanceSummarySerializer,
     DashboardFeeSummarySerializer,
@@ -39,20 +60,29 @@ from .serializers import (
 )
 
 
-# ==========================================
-# Helper Functions
-# ==========================================
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
 
 def is_class_teacher(user):
     if not hasattr(user, "teacher_profile"):
         return False
+
     return ClassRoom.objects.filter(
         class_teacher=user.teacher_profile
     ).exists()
 
 
 def calculate_grade(marks):
-    """Calculate grade from marks."""
+    """
+    Calculate CBC grade from marks.
+    """
+
+    if marks is None:
+        return "N/A"
+
+    marks = float(marks)
+
     if marks >= 90:
         return "EE1"
     elif marks >= 75:
@@ -69,29 +99,131 @@ def calculate_grade(marks):
         return "BE1"
     elif marks >= 1:
         return "BE2"
+
     return "N/A"
 
 
 def calculate_student_subject_result(student, assessment):
-    return None
+    """
+    Calculate a student's result for an assessment.
+    """
+
+    result = Result.objects.filter(
+        student=student,
+        assessment=assessment,
+    ).first()
+
+    if not result:
+        return None
+
+    return result
 
 
-def calculate_student_term_result(student, classroom, term, academic_year):
-    return None
+def calculate_student_term_result(
+    student,
+    classroom,
+    term,
+    academic_year,
+):
+    """
+    Calculate the student's average for a term.
+
+    This is intentionally kept independent of fields that may
+    differ between Result/Assessment implementations.
+    """
+
+    results = Result.objects.filter(
+        student=student,
+    )
+
+    # Filter assessment-related fields only if they exist.
+    assessment_fields = {
+        field.name
+        for field in Assessment._meta.get_fields()
+    }
+
+    if "classroom" in assessment_fields:
+        results = results.filter(
+            assessment__classroom=classroom
+        )
+
+    if "term" in assessment_fields:
+        results = results.filter(
+            assessment__term=term
+        )
+
+    if "academic_year" in assessment_fields:
+        results = results.filter(
+            assessment__academic_year=academic_year
+        )
+
+    average = results.aggregate(
+        average=Avg("marks")
+    )["average"]
+
+    if average is None:
+        return None
+
+    return {
+        "student": student,
+        "classroom": classroom,
+        "term": term,
+        "academic_year": academic_year,
+        "average": round(float(average), 2),
+        "grade": calculate_grade(average),
+    }
 
 
-def calculate_class_positions(classroom, term, academic_year):
-    return None
+def calculate_class_positions(
+    classroom,
+    term,
+    academic_year,
+):
+    """
+    Calculate class positions based on term averages.
+    """
+
+    students = Student.objects.filter(
+        classroom=classroom
+    )
+
+    results = []
+
+    for student in students:
+        result = calculate_student_term_result(
+            student=student,
+            classroom=classroom,
+            term=term,
+            academic_year=academic_year,
+        )
+
+        if result:
+            results.append(result)
+
+    results.sort(
+        key=lambda item: item["average"],
+        reverse=True,
+    )
+
+    for position, result in enumerate(
+        results,
+        start=1,
+    ):
+        result["position"] = position
+
+    return results
 
 
-# ==========================================
-# API Views
-# ==========================================
+# ============================================================
+# TOP OUTSTANDING STUDENTS
+# ============================================================
 
 class TopOutstandingStudentsAPIView(APIView):
+
     permission_classes = [IsDashboardUser]
 
     def get(self, request):
+
         students = (
             Result.objects
             .values(
@@ -103,57 +235,80 @@ class TopOutstandingStudentsAPIView(APIView):
                 "student__last_name",
                 "student__classroom__grade",
             )
-            .annotate(average_score=Avg("marks"))
-            .exclude(average_score=None)
-            .order_by("-average_score")[:10]
+            .annotate(
+                average_score=Avg("marks")
+            )
+            .exclude(
+                average_score=None
+            )
+            .order_by(
+                "-average_score"
+            )[:10]
         )
 
         data = []
-        for position, student in enumerate(students, start=1):
-            average = round(student["average_score"], 2)
-            grade = calculate_grade(average)
+
+        for position, student in enumerate(
+            students,
+            start=1,
+        ):
+            average = round(
+                float(student["average_score"]),
+                2,
+            )
 
             data.append({
                 "position": position,
                 "photo": student["student__photo"],
-                "assessment_number": student["student__assessment_number"],
-                "admission_number": student["student__admission_number"],
-                "student_name": f'{student["student__first_name"]} {student["student__last_name"]}',
-                "classroom": student["student__classroom__grade"],
+                "assessment_number": student[
+                    "student__assessment_number"
+                ],
+                "admission_number": student[
+                    "student__admission_number"
+                ],
+                "student_name": (
+                    f'{student["student__first_name"]} '
+                    f'{student["student__last_name"]}'
+                ),
+                "classroom": student[
+                    "student__classroom__grade"
+                ],
                 "average_score": average,
-                "grade": grade,
+                "grade": calculate_grade(average),
             })
 
-        serializer = TopStudentSerializer(data, many=True)
+        serializer = TopStudentSerializer(
+            data,
+            many=True,
+        )
+
         return Response(serializer.data)
 
 
+# ============================================================
+# MAIN DASHBOARD
+# ============================================================
+
 class DashboardAPIView(APIView):
-    """Main Dashboard Statistics"""
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-    # BUG FIX: DRF combines multiple permission_classes with AND
-    # logic (every class must return True), not OR. With
-    # [IsAcademicCoordinator, IsSuperAdmin], an Academic Coordinator
-    # passes IsAcademicCoordinator but FAILS IsSuperAdmin -> 403,
-    # locking Coordinators out of the main dashboard entirely.
-    # IsAcademicCoordinator already covers Super Admin + Academic
-    # Coordinator, so it alone is correct.
+
     permission_classes = [IsAcademicCoordinator]
-<<<<<<< HEAD
-=======
-=======
-    permission_classes = [IsAcademicCoordinator, IsSuperAdmin]
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 
     def get(self, request):
+
         total_students = Student.objects.count()
-        active_students = Student.objects.filter(status=Student.Status.ACTIVE).count()
-        boys = Student.objects.filter(gender=Student.Gender.MALE).count()
-        girls = Student.objects.filter(gender=Student.Gender.FEMALE).count()
+
+        active_students = Student.objects.filter(
+            status=Student.Status.ACTIVE
+        ).count()
+
+        boys = Student.objects.filter(
+            gender=Student.Gender.MALE
+        ).count()
+
+        girls = Student.objects.filter(
+            gender=Student.Gender.FEMALE
+        ).count()
+
         total_teachers = TeacherProfile.objects.count()
         total_parents = ParentProfile.objects.count()
         total_classes = ClassRoom.objects.count()
@@ -166,12 +321,26 @@ class DashboardAPIView(APIView):
         )
 
         total_attendance = Attendance.objects.count()
-        present = Attendance.objects.filter(status=Attendance.Status.PRESENT).count()
-        attendance_today = round((present / total_attendance) * 100, 2) if total_attendance > 0 else Decimal("0.00")
+
+        present = Attendance.objects.filter(
+            status=Attendance.Status.PRESENT
+        ).count()
+
+        attendance_today = (
+            round(
+                (present / total_attendance) * 100,
+                2,
+            )
+            if total_attendance > 0
+            else Decimal("0.00")
+        )
 
         total_exams = Exam.objects.count()
         total_results = Result.objects.count()
-        unread_notifications = Notification.objects.filter(is_read=False).count()
+
+        unread_notifications = Notification.objects.filter(
+            is_read=False
+        ).count()
 
         data = {
             "total_students": total_students,
@@ -183,112 +352,226 @@ class DashboardAPIView(APIView):
             "total_subjects": total_subjects,
             "total_parents": total_parents,
             "attendance_today": attendance_today,
-            "total_fee": fees["total_fee"] or Decimal("0.00"),
-            "total_paid": fees["total_paid"] or Decimal("0.00"),
-            "total_balance": fees["total_balance"] or Decimal("0.00"),
+            "total_fee": (
+                fees["total_fee"]
+                or Decimal("0.00")
+            ),
+            "total_paid": (
+                fees["total_paid"]
+                or Decimal("0.00")
+            ),
+            "total_balance": (
+                fees["total_balance"]
+                or Decimal("0.00")
+            ),
             "total_exams": total_exams,
             "total_results": total_results,
             "unread_notifications": unread_notifications,
         }
 
         serializer = DashboardSerializer(data)
+
         return Response(serializer.data)
 
+
+# ============================================================
+# TOP PERFORMING CLASSES
+# ============================================================
 
 class TopPerformingClassesAPIView(APIView):
+
     permission_classes = [IsDashboardUser]
 
     def get(self, request):
+
         classes = (
             Result.objects
-            .values("student__classroom", "student__classroom__grade")
+            .values(
+                "student__classroom",
+                "student__classroom__grade",
+            )
             .annotate(
                 average_score=Avg("marks"),
-                total_students=Count("student", distinct=True),
+                total_students=Count(
+                    "student",
+                    distinct=True,
+                ),
             )
-            .order_by("-average_score")
+            .order_by(
+                "-average_score"
+            )
         )
 
-        data = [
-            {
-                "position": position,
-                "classroom": classroom["student__classroom__grade"],
-                "average_score": round(classroom["average_score"], 2),
-                "total_students": classroom["total_students"],
-            }
-            for position, classroom in enumerate(classes, start=1)
-        ]
+        data = []
 
-        serializer = TopClassSerializer(data, many=True)
+        for position, classroom in enumerate(
+            classes,
+            start=1,
+        ):
+            data.append({
+                "position": position,
+                "classroom": classroom[
+                    "student__classroom__grade"
+                ],
+                "average_score": round(
+                    float(
+                        classroom["average_score"]
+                        or 0
+                    ),
+                    2,
+                ),
+                "total_students": classroom[
+                    "total_students"
+                ],
+            })
+
+        serializer = TopClassSerializer(
+            data,
+            many=True,
+        )
+
         return Response(serializer.data)
 
 
+# ============================================================
+# RECENT FEE PAYMENTS
+# ============================================================
+
 class RecentFeePaymentsAPIView(APIView):
+
     permission_classes = [IsDashboardUser]
 
     def get(self, request):
+
         payments = (
             FeePayment.objects
-            .select_related("student_fee__student")
-            .order_by("-payment_date")[:10]
+            .select_related(
+                "student_fee__student"
+            )
+            .order_by(
+                "-payment_date"
+            )[:10]
         )
 
-        data = [
-            {
+        data = []
+
+        for payment in payments:
+
+            student = payment.student_fee.student
+
+            data.append({
                 "receipt_number": payment.receipt_number,
-                "student_name": f"{payment.student_fee.student.first_name} {payment.student_fee.student.last_name}",
-                "admission_number": payment.student_fee.student.admission_number,
+                "student_name": (
+                    f"{student.first_name} "
+                    f"{student.last_name}"
+                ),
+                "admission_number": (
+                    student.admission_number
+                ),
                 "amount": payment.amount,
                 "payment_method": payment.payment_method,
                 "payment_date": payment.payment_date,
                 "payment_status": payment.payment_status,
-            }
-            for payment in payments
-        ]
+            })
 
-        serializer = RecentPaymentSerializer(data, many=True)
+        serializer = RecentPaymentSerializer(
+            data,
+            many=True,
+        )
+
         return Response(serializer.data)
 
 
+# ============================================================
+# RECENT ADMISSIONS
+# ============================================================
+
 class RecentAdmissionsAPIView(APIView):
+
     permission_classes = [IsDashboardUser]
 
     def get(self, request):
+
         students = (
             Student.objects
             .select_related("classroom")
-            .order_by("-date_admitted")[:10]
+            .order_by(
+                "-date_admitted"
+            )[:10]
         )
 
-        data = [
-            {
-                "photo": student.photo,
-                "admission_number": student.admission_number,
-                "assessment_number": student.assessment_number,
-                "student_name": f"{student.first_name} {student.last_name}",
-                "classroom": str(student.classroom),
-                "date_admitted": student.date_admitted,
-            }
-            for student in students
-        ]
+        data = []
 
-        serializer = RecentAdmissionSerializer(data, many=True)
+        for student in students:
+
+            data.append({
+                "photo": student.photo,
+                "admission_number": (
+                    student.admission_number
+                ),
+                "assessment_number": (
+                    student.assessment_number
+                ),
+                "student_name": (
+                    f"{student.first_name} "
+                    f"{student.last_name}"
+                ),
+                "classroom": (
+                    str(student.classroom)
+                    if student.classroom
+                    else None
+                ),
+                "date_admitted": (
+                    student.date_admitted
+                ),
+            })
+
+        serializer = RecentAdmissionSerializer(
+            data,
+            many=True,
+        )
+
         return Response(serializer.data)
 
 
+# ============================================================
+# TODAY ATTENDANCE
+# ============================================================
+
 class TodayAttendanceSummaryAPIView(APIView):
+
     permission_classes = [IsDashboardUser]
 
     def get(self, request):
-        today = timezone.localdate()
-        attendance = Attendance.objects.filter(marked_at__date=today)
 
-        present = attendance.filter(status=Attendance.Status.PRESENT).count()
-        absent = attendance.filter(status=Attendance.Status.ABSENT).count()
-        excused = attendance.filter(status=Attendance.Status.EXCUSED).count()
+        today = timezone.localdate()
+
+        attendance = Attendance.objects.filter(
+            marked_at__date=today
+        )
+
+        present = attendance.filter(
+            status=Attendance.Status.PRESENT
+        ).count()
+
+        absent = attendance.filter(
+            status=Attendance.Status.ABSENT
+        ).count()
+
+        excused = attendance.filter(
+            status=Attendance.Status.EXCUSED
+        ).count()
+
         total = attendance.count()
 
-        percentage = round((present / total) * 100, 2) if total > 0 else 0
+        percentage = (
+            round(
+                (present / total) * 100,
+                2,
+            )
+            if total > 0
+            else 0
+        )
 
         serializer = AttendanceSummarySerializer({
             "present": present,
@@ -297,23 +580,50 @@ class TodayAttendanceSummaryAPIView(APIView):
             "total": total,
             "attendance_percentage": percentage,
         })
+
         return Response(serializer.data)
 
 
+# ============================================================
+# DASHBOARD FEE SUMMARY
+# ============================================================
+
 class DashboardFeeSummaryAPIView(APIView):
+
     permission_classes = [IsDashboardUser]
 
     def get(self, request):
+
         fees = StudentFee.objects.aggregate(
             expected_fee=Sum("total_fee"),
             collected_fee=Sum("amount_paid"),
             outstanding_fee=Sum("balance"),
         )
 
-        expected = fees["expected_fee"] or Decimal("0.00")
-        collected = fees["collected_fee"] or Decimal("0.00")
-        outstanding = fees["outstanding_fee"] or Decimal("0.00")
-        percentage = round((collected / expected) * 100, 2) if expected > 0 else Decimal("0.00")
+        expected = (
+            fees["expected_fee"]
+            or Decimal("0.00")
+        )
+
+        collected = (
+            fees["collected_fee"]
+            or Decimal("0.00")
+        )
+
+        outstanding = (
+            fees["outstanding_fee"]
+            or Decimal("0.00")
+        )
+
+        percentage = (
+            round(
+                (collected / expected) * 100,
+                2,
+            )
+            if expected > 0
+            else Decimal("0.00")
+        )
+
         total_transactions = FeePayment.objects.count()
 
         serializer = DashboardFeeSummarySerializer({
@@ -323,16 +633,28 @@ class DashboardFeeSummaryAPIView(APIView):
             "collection_percentage": percentage,
             "total_transactions": total_transactions,
         })
+
         return Response(serializer.data)
 
 
+# ============================================================
+# EXAM PERFORMANCE
+# ============================================================
+
 class ExamPerformanceDashboardAPIView(APIView):
+
     permission_classes = [IsDashboardUser]
 
     def get(self, request):
+
         total_exams = Exam.objects.count()
+
         published_results = Result.objects.count()
-        pending_results = max(total_exams - published_results, 0)
+
+        pending_results = max(
+            total_exams - published_results,
+            0,
+        )
 
         stats = Result.objects.aggregate(
             overall_average=Avg("marks"),
@@ -344,66 +666,136 @@ class ExamPerformanceDashboardAPIView(APIView):
             "total_exams": total_exams,
             "published_results": published_results,
             "pending_results": pending_results,
-            "overall_average": stats["overall_average"] or Decimal("0.00"),
-            "highest_score": stats["highest_score"] or Decimal("0.00"),
-            "lowest_score": stats["lowest_score"] or Decimal("0.00"),
+            "overall_average": (
+                stats["overall_average"]
+                or Decimal("0.00")
+            ),
+            "highest_score": (
+                stats["highest_score"]
+                or Decimal("0.00")
+            ),
+            "lowest_score": (
+                stats["lowest_score"]
+                or Decimal("0.00")
+            ),
         })
+
         return Response(serializer.data)
 
 
+# ============================================================
+# UPCOMING NOTIFICATIONS
+# ============================================================
+
 class UpcomingNotificationsAPIView(APIView):
+
     permission_classes = [IsDashboardUser]
 
     def get(self, request):
+
         announcements = (
             Announcement.objects
             .select_related("created_by")
-            .order_by("-created_at")[:10]
+            .order_by(
+                "-created_at"
+            )[:10]
         )
 
-        data = [
-            {
+        data = []
+
+        for announcement in announcements:
+
+            data.append({
                 "id": announcement.id,
                 "title": announcement.title,
                 "message": announcement.message,
                 "priority": announcement.priority,
                 "target": announcement.target,
                 "created_at": announcement.created_at,
-                "created_by": announcement.created_by.get_full_name() if announcement.created_by else "System",
-            }
-            for announcement in announcements
-        ]
+                "created_by": (
+                    announcement.created_by.get_full_name()
+                    if announcement.created_by
+                    else "System"
+                ),
+            })
 
-        serializer = UpcomingNotificationSerializer(data, many=True)
+        serializer = UpcomingNotificationSerializer(
+            data,
+            many=True,
+        )
+
         return Response(serializer.data)
 
 
+# ============================================================
+# PARENT DASHBOARD
+# ============================================================
+
 class ParentDashboardAPIView(APIView):
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        parent = ParentProfile.objects.filter(user=request.user).first()
-        if not parent:
-            return Response({"detail": "Parent profile not found."}, status=404)
 
-        students = Student.objects.filter(parent=parent)
+        parent = ParentProfile.objects.filter(
+            user=request.user
+        ).first()
+
+        if not parent:
+            return Response(
+                {
+                    "detail": (
+                        "Parent profile not found."
+                    )
+                },
+                status=404,
+            )
+
+        students = Student.objects.filter(
+            parent=parent
+        )
+
         children_count = students.count()
 
-        fee_summary = StudentFee.objects.filter(student__in=students).aggregate(
+        fee_summary = StudentFee.objects.filter(
+            student__in=students
+        ).aggregate(
             total_balance=Sum("balance")
         )
-        total_fee_balance = fee_summary["total_balance"] or Decimal("0.00")
 
-        attendance = Attendance.objects.filter(student__in=students)
+        total_fee_balance = (
+            fee_summary["total_balance"]
+            or Decimal("0.00")
+        )
+
+        attendance = Attendance.objects.filter(
+            student__in=students
+        )
+
         total = attendance.count()
-        present = attendance.filter(status=Attendance.Status.PRESENT).count()
-        overall_attendance = round((present / total) * 100, 2) if total > 0 else Decimal("0.00")
 
-        unread_notifications = Notification.objects.filter(
-            recipient=request.user, is_read=False
+        present = attendance.filter(
+            status=Attendance.Status.PRESENT
         ).count()
 
-        announcements = Announcement.objects.order_by("-created_at")[:5]
+        overall_attendance = (
+            round(
+                (present / total) * 100,
+                2,
+            )
+            if total > 0
+            else Decimal("0.00")
+        )
+
+        unread_notifications = Notification.objects.filter(
+            recipient=request.user,
+            is_read=False,
+        ).count()
+
+        announcements = (
+            Announcement.objects
+            .order_by("-created_at")[:5]
+        )
 
         serializer = ParentDashboardSerializer({
             "parent_name": request.user.get_full_name(),
@@ -413,14 +805,24 @@ class ParentDashboardAPIView(APIView):
             "unread_notifications": unread_notifications,
             "announcements": announcements,
         })
+
         return Response(serializer.data)
 
 
+# ============================================================
+# PARENT CHILDREN
+# ============================================================
+
 class ParentChildrenAPIView(APIView):
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        parent = ParentProfile.objects.filter(user=request.user).first()
+
+        parent = ParentProfile.objects.filter(
+            user=request.user
+        ).first()
+
         if not parent:
             return Response([])
 
@@ -435,50 +837,116 @@ class ParentChildrenAPIView(APIView):
         )
 
         data = []
-        for student in students:
-            teacher = student.classroom.class_teacher if student.classroom else None
 
-            attendance = Attendance.objects.filter(student=student)
+        for student in students:
+
+            teacher = (
+                student.classroom.class_teacher
+                if student.classroom
+                else None
+            )
+
+            attendance = Attendance.objects.filter(
+                student=student
+            )
+
             total = attendance.count()
-            present = attendance.filter(status=Attendance.Status.PRESENT).count()
-            attendance_percentage = round((present / total) * 100, 2) if total > 0 else 0
+
+            present = attendance.filter(
+                status=Attendance.Status.PRESENT
+            ).count()
+
+            attendance_percentage = (
+                round(
+                    (present / total) * 100,
+                    2,
+                )
+                if total > 0
+                else 0
+            )
 
             fee_balance = (
-                StudentFee.objects.filter(student=student)
-                .aggregate(balance=Sum("balance"))["balance"] or Decimal("0.00")
+                StudentFee.objects
+                .filter(student=student)
+                .aggregate(
+                    balance=Sum("balance")
+                )["balance"]
+                or Decimal("0.00")
             )
 
             latest_result = (
-                StudentTermResult.objects.filter(student=student)
-                .order_by("-id").first()
+                StudentTermResult.objects
+                .filter(student=student)
+                .order_by("-id")
+                .first()
             )
 
             data.append({
                 "id": student.id,
                 "photo": student.photo,
-                "admission_number": student.admission_number,
-                "assessment_number": student.assessment_number,
+                "admission_number": (
+                    student.admission_number
+                ),
+                "assessment_number": (
+                    student.assessment_number
+                ),
                 "first_name": student.first_name,
                 "last_name": student.last_name,
-                "grade": student.classroom.grade if student.classroom else None,
-                "stream": student.classroom.stream if student.classroom else None,
-                "class_teacher": teacher.user.get_full_name() if teacher else None,
-                "teacher_phone": teacher.user.phone_number if teacher else None,
-                "attendance_percentage": attendance_percentage,
-                "latest_grade": latest_result.overall_grade if latest_result else "-",
+                "grade": (
+                    student.classroom.grade
+                    if student.classroom
+                    else None
+                ),
+                "stream": (
+                    student.classroom.stream
+                    if student.classroom
+                    else None
+                ),
+                "class_teacher": (
+                    teacher.user.get_full_name()
+                    if teacher
+                    else None
+                ),
+                "teacher_phone": (
+                    teacher.user.phone_number
+                    if teacher
+                    else None
+                ),
+                "attendance_percentage": (
+                    attendance_percentage
+                ),
+                "latest_grade": (
+                    latest_result.overall_grade
+                    if latest_result
+                    else "-"
+                ),
                 "fee_balance": fee_balance,
                 "status": student.status,
             })
 
-        serializer = ParentChildSerializer(data, many=True)
+        serializer = ParentChildSerializer(
+            data,
+            many=True,
+        )
+
         return Response(serializer.data)
 
 
+# ============================================================
+# PARENT CHILD DETAILS
+# ============================================================
+
 class ParentChildDetailsAPIView(APIView):
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, id):
-        parent = get_object_or_404(ParentProfile, user=request.user)
+
+        parent = get_object_or_404(
+            ParentProfile,
+            user=request.user,
+        )
+
         student = get_object_or_404(
             Student.objects.select_related(
                 "classroom",
@@ -490,265 +958,524 @@ class ParentChildDetailsAPIView(APIView):
         )
 
         classroom = student.classroom
-        teacher = classroom.class_teacher if classroom else None
 
-        attendance = Attendance.objects.filter(student=student)
+        teacher = (
+            classroom.class_teacher
+            if classroom
+            else None
+        )
+
+        attendance = Attendance.objects.filter(
+            student=student
+        )
+
         total = attendance.count()
-        present = attendance.filter(status=Attendance.Status.PRESENT).count()
-        attendance_percentage = round((present / total) * 100, 2) if total > 0 else 0
+
+        present = attendance.filter(
+            status=Attendance.Status.PRESENT
+        ).count()
+
+        attendance_percentage = (
+            round(
+                (present / total) * 100,
+                2,
+            )
+            if total > 0
+            else 0
+        )
 
         fee_balance = (
-            StudentFee.objects.filter(student=student)
-            .aggregate(balance=Sum("balance"))["balance"] or Decimal("0.00")
+            StudentFee.objects
+            .filter(student=student)
+            .aggregate(
+                balance=Sum("balance")
+            )["balance"]
+            or Decimal("0.00")
         )
 
         latest_result = (
-            StudentTermResult.objects.filter(student=student)
-            .order_by("-id").first()
+            StudentTermResult.objects
+            .filter(student=student)
+            .order_by("-id")
+            .first()
         )
 
         data = {
             "id": student.id,
-            "photo": student.photo.url if student.photo else None,
-            "admission_number": student.admission_number,
-            "assessment_number": student.assessment_number,
+
+            "photo": (
+                student.photo.url
+                if student.photo
+                else None
+            ),
+
+            "admission_number": (
+                student.admission_number
+            ),
+
+            "assessment_number": (
+                student.assessment_number
+            ),
+
             "first_name": student.first_name,
             "last_name": student.last_name,
             "gender": student.gender,
             "date_of_birth": student.date_of_birth,
-            "grade": classroom.grade if classroom else None,
-            "stream": classroom.stream if classroom else None,
-            "class_teacher": teacher.user.get_full_name() if teacher else None,
-            "teacher_phone": teacher.user.phone_number if teacher else None,
+
+            "grade": (
+                classroom.grade
+                if classroom
+                else None
+            ),
+
+            "stream": (
+                classroom.stream
+                if classroom
+                else None
+            ),
+
+            "class_teacher": (
+                teacher.user.get_full_name()
+                if teacher
+                else None
+            ),
+
+            "teacher_phone": (
+                teacher.user.phone_number
+                if teacher
+                else None
+            ),
+
             "relationship": "Parent",
-            "date_admitted": student.date_admitted,
+
+            "date_admitted": (
+                student.date_admitted
+            ),
+
             "status": student.status,
-            "attendance_percentage": attendance_percentage,
-            "latest_grade": latest_result.overall_grade if latest_result else "-",
+
+            "attendance_percentage": (
+                attendance_percentage
+            ),
+
+            "latest_grade": (
+                latest_result.overall_grade
+                if latest_result
+                else "-"
+            ),
+
             "fee_balance": fee_balance,
         }
 
         serializer = ParentChildDetailsSerializer(data)
+
         return Response(serializer.data)
 
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
+# ============================================================
+# TEACHER DASHBOARD
+# ============================================================
+
 class TeacherDashboardAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsTeacher]
+
+    permission_classes = [
+        IsAuthenticated,
+        IsTeacher,
+    ]
 
     def get(self, request):
-        teacher = request.user.teacher_profile
-        assignments = TeacherAssignment.objects.filter(teacher=teacher, is_active=True)
 
-        data = {
-            "teacher_name": request.user.get_full_name(),
-            "is_class_teacher": is_class_teacher(request.user),
-            "total_assignments": assignments.count(),
-            "total_subjects": assignments.values("subject").distinct().count(),
-            "total_classes": assignments.values("classroom").distinct().count(),
-            "pending_results": ResultSubmission.objects.filter(
+        teacher = request.user.teacher_profile
+
+        assignments = TeacherAssignment.objects.filter(
+            teacher=teacher,
+            is_active=True,
+        )
+
+        assigned_classes = (
+            assignments
+            .values("classroom")
+            .distinct()
+            .count()
+        )
+
+        assigned_subjects = (
+            assignments
+            .values("subject")
+            .distinct()
+            .count()
+        )
+
+        total_students = (
+            Student.objects
+            .filter(
+                classroom__in=assignments.values(
+                    "classroom"
+                )
+            )
+            .distinct()
+            .count()
+        )
+
+        today = timezone.localdate().strftime(
+            "%A"
+        )
+
+        today_lessons = Timetable.objects.filter(
+            assignment__teacher=teacher,
+            day=today,
+            is_active=True,
+        ).count()
+
+        pending_results = (
+            ResultSubmission.objects
+            .filter(
                 submitted_by=request.user,
                 approval_status__in=[
                     ResultSubmission.ApprovalStatus.DRAFT,
                     ResultSubmission.ApprovalStatus.RETURNED,
                 ],
-            ).count(),
+            )
+            .count()
+        )
+
+        data = {
+            "teacher_name": (
+                request.user.get_full_name()
+            ),
+
+            "is_class_teacher": (
+                is_class_teacher(request.user)
+            ),
+
+            "assigned_classes": assigned_classes,
+
+            "assigned_subjects": assigned_subjects,
+
+            "total_students": total_students,
+
+            "today_lessons": today_lessons,
+
+            "pending_results": pending_results,
         }
-        return Response(data)
+
+        serializer = TeacherDashboardSerializer(data)
+
+        return Response(serializer.data)
 
 
-# ==========================================
-# Teacher Students — COMPLETED
-# ==========================================
+# ============================================================
+# TEACHER STUDENTS
+# ============================================================
 
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 class TeacherStudentsAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsTeacher]
+
+    permission_classes = [
+        IsAuthenticated,
+        IsTeacher,
+    ]
 
     def get(self, request):
+
         teacher = request.user.teacher_profile
-        assignments = TeacherAssignment.objects.filter(teacher=teacher, is_active=True)
 
-        # Get all classrooms this teacher teaches
-        classroom_ids = assignments.values_list("classroom", flat=True).distinct()
-        subject_ids = assignments.values_list("subject", flat=True).distinct()
+        assignments = TeacherAssignment.objects.filter(
+            teacher=teacher,
+            is_active=True,
+        )
 
-        # Get all students in those classrooms
+        classroom_ids = (
+            assignments
+            .values_list(
+                "classroom",
+                flat=True,
+            )
+            .distinct()
+        )
+
         students = (
             Student.objects
-            .filter(classroom__in=classroom_ids)
-            .select_related("classroom", "parent")
-            .order_by("classroom__grade", "last_name", "first_name")
+            .filter(
+                classroom__in=classroom_ids
+            )
+            .select_related(
+                "classroom",
+                "parent",
+            )
+            .order_by(
+                "classroom__grade",
+                "last_name",
+                "first_name",
+            )
         )
 
         data = []
-        for student in students:
-            # Attendance
-            attendance = Attendance.objects.filter(student=student)
-            total = attendance.count()
-            present = attendance.filter(status=Attendance.Status.PRESENT).count()
-            attendance_percentage = round((present / total) * 100, 2) if total > 0 else 0
 
-            # Latest term result
+        for student in students:
+
+            attendance = Attendance.objects.filter(
+                student=student
+            )
+
+            total = attendance.count()
+
+            present = attendance.filter(
+                status=Attendance.Status.PRESENT
+            ).count()
+
+            attendance_percentage = (
+                round(
+                    (present / total) * 100,
+                    2,
+                )
+                if total > 0
+                else 0
+            )
+
             latest_result = (
-                StudentTermResult.objects.filter(student=student)
-                .order_by("-id").first()
+                StudentTermResult.objects
+                .filter(student=student)
+                .order_by("-id")
+                .first()
             )
 
             data.append({
                 "id": student.id,
-                "photo": student.photo.url if student.photo else None,
-                "admission_number": student.admission_number,
-                "assessment_number": student.assessment_number,
+
+                "photo": (
+                    student.photo.url
+                    if student.photo
+                    else None
+                ),
+
+                "admission_number": (
+                    student.admission_number
+                ),
+
+                "assessment_number": (
+                    student.assessment_number
+                ),
+
                 "first_name": student.first_name,
                 "last_name": student.last_name,
-                "grade": student.classroom.grade,
-                "stream": student.classroom.stream,
-                "attendance_percentage": attendance_percentage,
-                "latest_grade": latest_result.overall_grade if latest_result else "-",
+
+                "grade": (
+                    student.classroom.grade
+                    if student.classroom
+                    else None
+                ),
+
+                "stream": (
+                    student.classroom.stream
+                    if student.classroom
+                    else None
+                ),
+
+                "attendance_percentage": (
+                    attendance_percentage
+                ),
+
+                "latest_grade": (
+                    latest_result.overall_grade
+                    if latest_result
+                    else "-"
+                ),
+
                 "status": student.status,
             })
 
-        serializer = TeacherStudentSerializer(data, many=True)
+        serializer = TeacherStudentSerializer(
+            data,
+            many=True,
+        )
+
         return Response(serializer.data)
 
-# ==========================================
-# Teacher Student Details
-# ==========================================
+
+# ============================================================
+# TEACHER STUDENT DETAILS
+# ============================================================
 
 class TeacherStudentDetailsAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, IsTeacher]
+    permission_classes = [
+        IsAuthenticated,
+        IsTeacher,
+    ]
 
     def get(self, request, pk):
 
         teacher = request.user.teacher_profile
 
-        classroom_ids = TeacherAssignment.objects.filter(
-            teacher=teacher,
-            is_active=True,
-        ).values_list("classroom_id", flat=True)
+        classroom_ids = (
+            TeacherAssignment.objects
+            .filter(
+                teacher=teacher,
+                is_active=True,
+            )
+            .values_list(
+                "classroom_id",
+                flat=True,
+            )
+        )
 
         student = get_object_or_404(
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
             Student.objects.select_related(
                 "classroom",
                 "parent__user",
             ),
-<<<<<<< HEAD
-=======
-=======
-            Student.objects.select_related("classroom"),
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
             pk=pk,
             classroom_id__in=classroom_ids,
         )
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-        # BUG FIX: Student has no parent_name/parent_phone fields —
-        # this crashed with AttributeError on every request. Derive
-        # from the related ParentProfile/User instead.
         parent_name = None
         parent_phone = None
+
         if student.parent and student.parent.user:
+
             parent_name = (
                 student.parent.user.get_full_name()
                 or student.parent.user.username
             )
-            parent_phone = student.parent.user.phone_number
 
-        # BUG FIX: attendance/latest grade were hardcoded placeholders
-        # (0 and "-") instead of being computed, unlike the sibling
-        # TeacherStudentsAPIView list view just above this one.
-        attendance = Attendance.objects.filter(student=student)
+            parent_phone = (
+                student.parent.user.phone_number
+            )
+
+        attendance = Attendance.objects.filter(
+            student=student
+        )
+
         attendance_total = attendance.count()
+
         attendance_present = attendance.filter(
             status=Attendance.Status.PRESENT
         ).count()
+
         attendance_percentage = (
-            round((attendance_present / attendance_total) * 100, 2)
+            round(
+                (
+                    attendance_present
+                    / attendance_total
+                ) * 100,
+                2,
+            )
             if attendance_total > 0
             else 0
         )
 
         latest_result = (
-            StudentTermResult.objects.filter(student=student)
+            StudentTermResult.objects
+            .filter(student=student)
             .order_by("-id")
             .first()
         )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
+        fee_balance = (
+            StudentFee.objects
+            .filter(student=student)
+            .aggregate(
+                balance=Sum("balance")
+            )["balance"]
+            or Decimal("0.00")
+        )
+
         data = {
             "id": student.id,
-            "photo": student.photo,
-            "admission_number": student.admission_number,
-            "assessment_number": student.assessment_number,
+
+            "photo": (
+                student.photo.url
+                if student.photo
+                else None
+            ),
+
+            "admission_number": (
+                student.admission_number
+            ),
+
+            "assessment_number": (
+                student.assessment_number
+            ),
+
             "first_name": student.first_name,
             "last_name": student.last_name,
             "gender": student.gender,
-            "date_of_birth": student.date_of_birth,
-            "grade": student.classroom.grade,
-            "stream": student.classroom.stream,
-            "date_admitted": student.date_admitted,
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
+
+            "date_of_birth": (
+                student.date_of_birth
+            ),
+
+            "grade": (
+                student.classroom.grade
+                if student.classroom
+                else None
+            ),
+
+            "stream": (
+                student.classroom.stream
+                if student.classroom
+                else None
+            ),
+
+            "date_admitted": (
+                student.date_admitted
+            ),
+
+            "status": student.status,
+
             "parent_name": parent_name,
             "parent_phone": parent_phone,
-            "attendance_percentage": attendance_percentage,
+
+            "attendance_percentage": (
+                attendance_percentage
+            ),
+
             "latest_grade": (
-                latest_result.overall_grade.level
-                if latest_result and latest_result.overall_grade
+                latest_result.overall_grade
+                if latest_result
                 else "-"
             ),
-<<<<<<< HEAD
-=======
-=======
-            "parent_name": student.parent_name,
-            "parent_phone": student.parent_phone,
-            "attendance_percentage": 0,
-            "latest_grade": "-",
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
-            "class_teacher": is_class_teacher(request.user),
+
+            "fee_balance": fee_balance,
+
+            "class_teacher": is_class_teacher(
+                request.user
+            ),
         }
 
-        serializer = TeacherStudentDetailsSerializer(data)
+        serializer = TeacherStudentDetailsSerializer(
+            data
+        )
+
         return Response(serializer.data)
 
 
-# ==========================================
-# Teacher Student Results
-# ==========================================
+# ============================================================
+# TEACHER STUDENT RESULTS
+# ============================================================
 
 class TeacherStudentResultsAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, IsTeacher]
+    permission_classes = [
+        IsAuthenticated,
+        IsTeacher,
+    ]
 
     def get(self, request, pk):
 
         teacher = request.user.teacher_profile
 
-        classroom_ids = TeacherAssignment.objects.filter(
-            teacher=teacher,
-            is_active=True,
-        ).values_list("classroom_id", flat=True)
+        classroom_ids = (
+            TeacherAssignment.objects
+            .filter(
+                teacher=teacher,
+                is_active=True,
+            )
+            .values_list(
+                "classroom_id",
+                flat=True,
+            )
+        )
 
         student = get_object_or_404(
             Student,
@@ -759,69 +1486,119 @@ class TeacherStudentResultsAPIView(APIView):
         results = (
             StudentResult.objects
             .filter(student=student)
-            .select_related("subject", "grade")
-            .order_by("subject__name")
+            .select_related(
+                "subject",
+                "grade",
+            )
+            .order_by(
+                "subject__name"
+            )
         )
 
-        data = [
-            {
+        data = []
+
+        for result in results:
+
+            data.append({
                 "id": result.id,
-                "subject": result.subject.name,
-                "score": result.average_score,
-                "grade": result.grade.level if result.grade else "-",
-                "cbc_code": result.cbc_code,
-                "description": result.cbc_description,
-            }
-            for result in results
-        ]
+
+                "subject": (
+                    result.subject.name
+                ),
+
+                "score": (
+                    result.average_score
+                ),
+
+                "grade": (
+                    result.grade.level
+                    if result.grade
+                    else "-"
+                ),
+
+                "cbc_code": (
+                    result.cbc_code
+                ),
+
+                "description": (
+                    result.cbc_description
+                ),
+            })
 
         return Response(data)
 
 
-# ==========================================
-# Teacher Update Student Result
-# ==========================================
+# ============================================================
+# TEACHER UPDATE STUDENT RESULT
+# ============================================================
 
 class TeacherUpdateStudentResultAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, IsTeacher]
+    permission_classes = [
+        IsAuthenticated,
+        IsTeacher,
+    ]
 
     def patch(self, request, pk):
 
-        result = get_object_or_404(StudentResult, pk=pk)
+        result = get_object_or_404(
+            StudentResult,
+            pk=pk,
+        )
+
         teacher = request.user.teacher_profile
 
-        assignment_exists = TeacherAssignment.objects.filter(
-            teacher=teacher,
-            subject=result.subject,
-            classroom=result.classroom,
-            is_active=True,
-        ).exists()
+        assignment_exists = (
+            TeacherAssignment.objects
+            .filter(
+                teacher=teacher,
+                subject=result.subject,
+                classroom=result.classroom,
+                is_active=True,
+            )
+            .exists()
+        )
 
         if not assignment_exists:
             return Response(
-                {"detail": "You are not assigned to teach this subject."},
+                {
+                    "detail": (
+                        "You are not assigned to "
+                        "teach this subject."
+                    )
+                },
                 status=403,
             )
 
-        serializer = TeacherStudentResultUpdateSerializer(
-            result,
-            data=request.data,
-            partial=True,
+        serializer = (
+            TeacherStudentResultUpdateSerializer(
+                result,
+                data=request.data,
+                partial=True,
+            )
         )
-        serializer.is_valid(raise_exception=True)
+
+        serializer.is_valid(
+            raise_exception=True
+        )
+
         serializer.save()
 
-        return Response(serializer.data)
+        return Response(
+            serializer.data
+        )
 
 
-# ==========================================
-# Teacher Assessments
-# ==========================================
+# ============================================================
+# TEACHER ASSESSMENTS
+# ============================================================
 
 class TeacherAssessmentListAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, IsTeacher]
+    permission_classes = [
+        IsAuthenticated,
+        IsTeacher,
+    ]
 
     def get(self, request):
 
@@ -832,107 +1609,120 @@ class TeacherAssessmentListAPIView(APIView):
             is_active=True,
         )
 
-        assessments = Assessment.objects.filter(
-            classroom__in=assignments.values("classroom"),
-            subject__in=assignments.values("subject"),
-        ).select_related(
-            "assessment_type", "classroom", "subject"
-        ).order_by("-assessment_date")
+        classroom_ids = assignments.values(
+            "classroom"
+        )
 
-        data = [
-            {
+        subject_ids = assignments.values(
+            "subject"
+        )
+
+        assessments = (
+            Assessment.objects
+            .filter(
+                classroom__in=classroom_ids,
+                subject__in=subject_ids,
+            )
+            .select_related(
+                "classroom",
+                "subject",
+            )
+            .order_by(
+                "-assessment_date"
+            )
+        )
+
+        data = []
+
+        for assessment in assessments:
+
+            assessment_type = getattr(
+                assessment,
+                "assessment_type",
+                None,
+            )
+
+            if hasattr(
+                assessment_type,
+                "name",
+            ):
+                assessment_type_name = (
+                    assessment_type.name
+                )
+            else:
+                assessment_type_name = (
+                    assessment_type
+                    if assessment_type
+                    else "-"
+                )
+
+            data.append({
                 "id": assessment.id,
-                "assessment_type": assessment.assessment_type.name,
-                "subject": assessment.subject.name,
-                "classroom": str(assessment.classroom),
-                "term": assessment.term,
-                "academic_year": assessment.academic_year,
-                "assessment_date": assessment.assessment_date,
-                "total_marks": assessment.total_marks,
-            }
-            for assessment in assessments
-        ]
+
+                "assessment_type": (
+                    assessment_type_name
+                ),
+
+                "subject": (
+                    assessment.subject.name
+                ),
+
+                "classroom": str(
+                    assessment.classroom
+                ),
+
+                "term": getattr(
+                    assessment,
+                    "term",
+                    None,
+                ),
+
+                "academic_year": getattr(
+                    assessment,
+                    "academic_year",
+                    None,
+                ),
+
+                "assessment_date": getattr(
+                    assessment,
+                    "assessment_date",
+                    None,
+                ),
+
+                "total_marks": getattr(
+                    assessment,
+                    "total_marks",
+                    None,
+                ),
+            })
 
         return Response(data)
 
 
-# ==========================================
-# Assessment Mark Entry
-# ==========================================
+# ============================================================
+# ASSESSMENT DETAILS / MARK ENTRY
+# ============================================================
 
 class TeacherAssessmentDetailsAPIView(APIView):
 
-    permission_classes = [IsAuthenticated, IsTeacher]
+    permission_classes = [
+        IsAuthenticated,
+        IsTeacher,
+    ]
 
     def get(self, request, pk):
 
         assessment = get_object_or_404(
             Assessment.objects.select_related(
-                "classroom", "subject", "assessment_type"
+                "classroom",
+                "subject",
             ),
             pk=pk,
         )
 
-        students = Student.objects.filter(
-            classroom=assessment.classroom,
-        ).order_by("first_name", "last_name")
+        teacher = request.user.teacher_profile
 
-        data = [
-            {
-                "student_id": student.id,
-                "admission_number": student.admission_number,
-                "student_name": f"{student.first_name} {student.last_name}",
-                "marks": "",
-                "status": "Pending",
-            }
-            for student in students
-        ]
-
-        return Response({
-            "assessment": {
-                "id": assessment.id,
-                "subject": assessment.subject.name,
-                "assessment_type": assessment.assessment_type.name,
-                "classroom": str(assessment.classroom),
-                "term": assessment.term,
-                "academic_year": assessment.academic_year,
-                "total_marks": assessment.total_marks,
-            },
-            "students": data,
-        })
-
-
-# ==========================================
-# Save Assessment Marks
-# ==========================================
-
-class TeacherSaveAssessmentMarksAPIView(APIView):
-
-    permission_classes = [IsAuthenticated, IsTeacher]
-
-    def post(self, request, pk):
-
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-        assessment = get_object_or_404(
-            Assessment.objects.select_related("classroom", "subject"),
-            pk=pk,
-        )
-
-        # ---------------------------------------------
-        # SECURITY (T2) — this endpoint had NO check that
-        # the teacher is actually assigned to this class/
-        # subject, bypassing the exact protection just
-        # added to results.views.ResultViewSet. Any teacher
-        # could otherwise save marks for any assessment in
-        # the school.
-        # ---------------------------------------------
-
-        teacher = getattr(request.user, "teacher_profile", None)
-
-        is_assigned = bool(teacher) and TeacherAssignment.objects.filter(
+        is_assigned = TeacherAssignment.objects.filter(
             teacher=teacher,
             classroom=assessment.classroom,
             subject=assessment.subject,
@@ -941,38 +1731,158 @@ class TeacherSaveAssessmentMarksAPIView(APIView):
 
         if not is_assigned:
             return Response(
-                {"detail": "You are not assigned to this class/subject."},
+                {
+                    "detail": (
+                        "You are not assigned to "
+                        "this class/subject."
+                    )
+                },
                 status=403,
             )
-<<<<<<< HEAD
-=======
-=======
-        assessment = get_object_or_404(Assessment, pk=pk)
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
 
-        submission, _ = ResultSubmission.objects.get_or_create(
-            assessment=assessment,
-            defaults={"submitted_by": request.user},
+        students = (
+            Student.objects
+            .filter(
+                classroom=assessment.classroom
+            )
+            .order_by(
+                "first_name",
+                "last_name",
+            )
         )
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-        # ---------------------------------------------
-        # BUG FIX — this previously called a local
-        # calculate_grade() that returns a plain string,
-        # then tried to save that string into Result.grade
-        # (a ForeignKey to GradeScale) and read .level /
-        # .description / .remarks off a str — guaranteed
-        # AttributeError/TypeError crash on every request.
-        # Fixed to reuse the SAME grading logic the results
-        # app itself uses (results.services.get_grade,
-        # calculate_percentage), so grading here stays
-        # consistent with the rest of the system instead of
-        # duplicating broken logic.
-        # ---------------------------------------------
+        data = []
+
+        for student in students:
+
+            data.append({
+                "student_id": student.id,
+
+                "admission_number": (
+                    student.admission_number
+                ),
+
+                "student_name": (
+                    f"{student.first_name} "
+                    f"{student.last_name}"
+                ),
+
+                "marks": "",
+
+                "status": "Pending",
+            })
+
+        assessment_type = getattr(
+            assessment,
+            "assessment_type",
+            None,
+        )
+
+        if hasattr(
+            assessment_type,
+            "name",
+        ):
+            assessment_type = (
+                assessment_type.name
+            )
+
+        return Response({
+            "assessment": {
+                "id": assessment.id,
+
+                "subject": (
+                    assessment.subject.name
+                ),
+
+                "assessment_type": (
+                    assessment_type
+                    if assessment_type
+                    else "-"
+                ),
+
+                "classroom": str(
+                    assessment.classroom
+                ),
+
+                "term": getattr(
+                    assessment,
+                    "term",
+                    None,
+                ),
+
+                "academic_year": getattr(
+                    assessment,
+                    "academic_year",
+                    None,
+                ),
+
+                "total_marks": getattr(
+                    assessment,
+                    "total_marks",
+                    None,
+                ),
+            },
+
+            "students": data,
+        })
+
+
+# ============================================================
+# SAVE ASSESSMENT MARKS
+# ============================================================
+
+class TeacherSaveAssessmentMarksAPIView(APIView):
+
+    permission_classes = [
+        IsAuthenticated,
+        IsTeacher,
+    ]
+
+    def post(self, request, pk):
+
+        assessment = get_object_or_404(
+            Assessment.objects.select_related(
+                "classroom",
+                "subject",
+            ),
+            pk=pk,
+        )
+
+        teacher = getattr(
+            request.user,
+            "teacher_profile",
+            None,
+        )
+
+        is_assigned = (
+            bool(teacher)
+            and TeacherAssignment.objects.filter(
+                teacher=teacher,
+                classroom=assessment.classroom,
+                subject=assessment.subject,
+                is_active=True,
+            ).exists()
+        )
+
+        if not is_assigned:
+            return Response(
+                {
+                    "detail": (
+                        "You are not assigned to "
+                        "this class/subject."
+                    )
+                },
+                status=403,
+            )
+
+        submission, _ = (
+            ResultSubmission.objects.get_or_create(
+                assessment=assessment,
+                defaults={
+                    "submitted_by": request.user
+                },
+            )
+        )
 
         from results.services import (
             get_grade,
@@ -980,164 +1890,163 @@ class TeacherSaveAssessmentMarksAPIView(APIView):
             process_result,
         )
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
-        for item in request.data.get("students", []):
-
-            student = Student.objects.get(pk=item["student_id"])
-            marks = item["marks"]
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-
-            percentage = calculate_percentage(
-                marks, assessment.total_marks
-            )
-            grade_scale = get_grade(percentage)
-
-            result, _ = Result.objects.update_or_create(
-<<<<<<< HEAD
-=======
-=======
-            grade = calculate_grade(marks)
-
-            Result.objects.update_or_create(
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
-                submission=submission,
-                student=student,
-                defaults={
-                    "marks": marks,
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-                    "weighted_marks": percentage,
-                    "grade": grade_scale,
-                    "cbc_code": grade_scale.level if grade_scale else "",
-                    "cbc_description": (
-                        grade_scale.description if grade_scale else ""
-                    ),
-<<<<<<< HEAD
-=======
-=======
-                    "weighted_marks": marks,
-                    "grade": grade,
-                    "cbc_code": grade.level if grade else "",
-                    "cbc_description": grade.description if grade else "",
-                    "grade_remarks": grade.remarks if grade else "",
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
-                    "entered_by": request.user,
-                    "last_modified_by": request.user,
-                    "status": Result.ResultStatus.PRESENT,
-                },
-            )
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> origin/main
-
-            # No-ops until the submission is approved, matching
-            # the same workflow results.views.ResultViewSet uses.
-            process_result(result)
-<<<<<<< HEAD
-=======
-=======
-            calculate_student_subject_result(student, assessment)
-            calculate_student_term_result(
-                student,
-                assessment.classroom,
-                assessment.term,
-                assessment.academic_year,
-            )
-            calculate_class_positions(
-                assessment.classroom,
-                assessment.term,
-                assessment.academic_year,
-            )
->>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
->>>>>>> origin/main
-
-        return Response({"message": "Marks saved successfully."})
-
-
-class TeacherDashboardAPIView(APIView):
-
-    permission_classes = [IsAuthenticated, IsTeacher]
-
-    def get(self, request):
-
-        teacher = request.user.teacher_profile
-
-        assignments = TeacherAssignment.objects.filter(
-            teacher=teacher,
-            is_active=True,
+        students_data = request.data.get(
+            "students",
+            []
         )
 
-        assigned_classes = assignments.values(
-            "classroom"
-        ).distinct().count()
+        if not isinstance(
+            students_data,
+            list,
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "students must be a list."
+                    )
+                },
+                status=400,
+            )
 
-        assigned_subjects = assignments.values(
-            "subject"
-        ).distinct().count()
+        for item in students_data:
 
-        total_students = Student.objects.filter(
-            classroom__in=assignments.values("classroom")
-        ).distinct().count()
+            student_id = item.get(
+                "student_id"
+            )
 
-        today = timezone.localdate().strftime("%A")
+            marks = item.get(
+                "marks"
+            )
 
-        today_lessons = Timetable.objects.filter(
-            assignment__teacher=teacher,
-            day=today,
-            is_active=True,
-        ).count()
+            if not student_id:
+                continue
 
-        pending_results = ResultSubmission.objects.filter(
-            submitted_by=request.user,
-            approval_status__in=[
-                ResultSubmission.ApprovalStatus.DRAFT,
-                ResultSubmission.ApprovalStatus.RETURNED,
-            ],
-        ).count()
+            student = get_object_or_404(
+                Student,
+                pk=student_id,
+                classroom=assessment.classroom,
+            )
 
-        data = {
-            "teacher_name": request.user.get_full_name(),
-            "is_class_teacher": is_class_teacher(request.user),
-            "assigned_classes": assigned_classes,
-            "assigned_subjects": assigned_subjects,
-            "total_students": total_students,
-            "today_lessons": today_lessons,
-            "pending_results": pending_results,
-        }
+            if marks in [
+                "",
+                None,
+            ]:
+                continue
 
-        serializer = TeacherDashboardSerializer(data)
+            try:
+                marks = Decimal(
+                    str(marks)
+                )
+            except (
+                ValueError,
+                TypeError,
+            ):
+                return Response(
+                    {
+                        "detail": (
+                            f"Invalid marks for "
+                            f"{student.first_name} "
+                            f"{student.last_name}."
+                        )
+                    },
+                    status=400,
+                )
 
-        return Response(serializer.data)
+            total_marks = (
+                assessment.total_marks
+                or 100
+            )
 
-# =====================================================
+            if marks < 0:
+                return Response(
+                    {
+                        "detail": (
+                            "Marks cannot be negative."
+                        )
+                    },
+                    status=400,
+                )
+
+            if marks > total_marks:
+                return Response(
+                    {
+                        "detail": (
+                            f"Marks cannot exceed "
+                            f"{total_marks}."
+                        )
+                    },
+                    status=400,
+                )
+
+            percentage = calculate_percentage(
+                marks,
+                total_marks,
+            )
+
+            grade_scale = get_grade(
+                percentage
+            )
+
+            result, _ = (
+                Result.objects.update_or_create(
+                    submission=submission,
+                    student=student,
+                    defaults={
+                        "marks": marks,
+
+                        "weighted_marks": (
+                            percentage
+                        ),
+
+                        "grade": grade_scale,
+
+                        "cbc_code": (
+                            grade_scale.level
+                            if grade_scale
+                            else ""
+                        ),
+
+                        "cbc_description": (
+                            grade_scale.description
+                            if grade_scale
+                            else ""
+                        ),
+
+                        "entered_by": (
+                            request.user
+                        ),
+
+                        "last_modified_by": (
+                            request.user
+                        ),
+
+                        "status": (
+                            Result.ResultStatus.PRESENT
+                        ),
+                    },
+                )
+            )
+
+            process_result(result)
+
+        return Response({
+            "message": (
+                "Marks saved successfully."
+            )
+        })
+
+
+# ============================================================
 # PARENT REPORT CARDS
-# =====================================================
+# ============================================================
 
 class ParentReportCardsAPIView(APIView):
-    """
-    Returns report cards belonging only to the
-    children of the currently logged-in parent.
-    """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated
+    ]
 
     def get(self, request):
-
-        # =============================================
-        # Find logged-in parent's profile
-        # =============================================
 
         parent = ParentProfile.objects.filter(
             user=request.user
@@ -1146,24 +2055,18 @@ class ParentReportCardsAPIView(APIView):
         if not parent:
             return Response(
                 {
-                    "detail": "Parent profile not found."
+                    "detail": (
+                        "Parent profile not found."
+                    )
                 },
-                status=404
+                status=404,
             )
 
-        # =============================================
-        # Get ONLY this parent's children
-        # =============================================
-
-        students = Student.objects.filter(
-            parent=parent
-        ).select_related(
-            "classroom"
+        students = (
+            Student.objects
+            .filter(parent=parent)
+            .select_related("classroom")
         )
-
-        # =============================================
-        # Get term results for those children
-        # =============================================
 
         term_results = (
             StudentTermResult.objects
@@ -1173,7 +2076,6 @@ class ParentReportCardsAPIView(APIView):
             .select_related(
                 "student",
                 "student__classroom",
-                "overall_grade",
             )
             .order_by(
                 "-academic_year",
@@ -1190,18 +2092,50 @@ class ParentReportCardsAPIView(APIView):
             student = result.student
             classroom = student.classroom
 
+            overall_grade = getattr(
+                result,
+                "overall_grade",
+                None,
+            )
+
+            grade_letter = "-"
+
+            if overall_grade:
+
+                if hasattr(
+                    overall_grade,
+                    "level",
+                ):
+                    grade_letter = (
+                        overall_grade.level
+                    )
+
+                else:
+                    grade_letter = str(
+                        overall_grade
+                    )
+
             data.append({
+
                 "student_id": student.id,
 
-                "first_name": student.first_name,
+                "first_name": (
+                    student.first_name
+                ),
 
-                "last_name": student.last_name,
+                "last_name": (
+                    student.last_name
+                ),
 
                 "photo": student.photo,
 
-                "admission_number": student.admission_number,
+                "admission_number": (
+                    student.admission_number
+                ),
 
-                "assessment_number": student.assessment_number,
+                "assessment_number": (
+                    student.assessment_number
+                ),
 
                 "grade": (
                     classroom.grade
@@ -1215,36 +2149,55 @@ class ParentReportCardsAPIView(APIView):
                     else ""
                 ),
 
-                "academic_year": result.academic_year,
+                "academic_year": (
+                    result.academic_year
+                ),
 
                 "term": result.term,
 
-                "average_score": result.average_marks,
-
-                "grade_letter": (
-                    result.overall_grade.level
-                    if result.overall_grade
-                    else result.cbc_code or "—"
+                "average_score": getattr(
+                    result,
+                    "average_marks",
+                    None,
                 ),
 
-                "total_marks": result.total_marks,
+                "grade_letter": grade_letter,
 
-                "total_subjects": result.total_subjects,
-
-                "position": result.position,
-
-                "attendance_percentage": (
-                    result.attendance_percentage
+                "total_marks": getattr(
+                    result,
+                    "total_marks",
+                    None,
                 ),
 
-                "class_teacher_comment": (
-                    result.class_teacher_comment
+                "total_subjects": getattr(
+                    result,
+                    "total_subjects",
+                    None,
                 ),
 
-                "headteacher_comment": (
-                    result.headteacher_comment
+                "position": getattr(
+                    result,
+                    "position",
+                    None,
+                ),
+
+                "attendance_percentage": getattr(
+                    result,
+                    "attendance_percentage",
+                    None,
+                ),
+
+                "class_teacher_comment": getattr(
+                    result,
+                    "class_teacher_comment",
+                    "",
+                ),
+
+                "headteacher_comment": getattr(
+                    result,
+                    "headteacher_comment",
+                    "",
                 ),
             })
 
         return Response(data)
-    
