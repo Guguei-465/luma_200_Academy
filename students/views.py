@@ -1,13 +1,23 @@
 from django.db import transaction
+<<<<<<< HEAD
 from django.db.models import Q
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 from django.shortcuts import get_object_or_404
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
+<<<<<<< HEAD
 from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework import status
 
 from accounts.models import CustomUser, ParentProfile, TeacherProfile
+=======
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+
+from accounts.models import ParentProfile
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 from students.models import Student, StudentTransfer
 from students.serializers import (
     StudentSerializer,
@@ -17,6 +27,7 @@ from students.serializers import (
 
 
 # =====================================================
+<<<<<<< HEAD
 # SECURITY
 #
 # None of the views below had ANY role restriction before —
@@ -63,6 +74,8 @@ def _teacher_classroom_ids(user):
 
 
 # =====================================================
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 # STUDENT LIST
 # GET /api/students/
 # =====================================================
@@ -73,6 +86,7 @@ class StudentListView(APIView):
 
     def get(self, request):
 
+<<<<<<< HEAD
         user = request.user
 
         base_qs = Student.objects.select_related(
@@ -104,6 +118,12 @@ class StudentListView(APIView):
 
         else:
             students = Student.objects.none()
+=======
+        students = Student.objects.select_related(
+            "parent__user",
+            "classroom",
+        ).all()
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 
         serializer = StudentListSerializer(
             students,
@@ -133,6 +153,7 @@ class StudentDetailView(APIView):
             pk=pk
         )
 
+<<<<<<< HEAD
         user = request.user
 
         allowed = user.role in [
@@ -163,6 +184,8 @@ class StudentDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
         serializer = StudentSerializer(
             student,
             context={"request": request}
@@ -178,7 +201,11 @@ class StudentDetailView(APIView):
 
 class StudentCreateView(APIView):
 
+<<<<<<< HEAD
     permission_classes = [IsAdminOrCoordinatorForStudents]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 
     def post(self, request):
 
@@ -212,7 +239,11 @@ class StudentCreateView(APIView):
 
 class StudentUpdateView(APIView):
 
+<<<<<<< HEAD
     permission_classes = [IsAdminOrCoordinatorForStudents]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 
     def put(self, request, pk):
 
@@ -281,7 +312,11 @@ class StudentUpdateView(APIView):
 
 class StudentDeleteView(APIView):
 
+<<<<<<< HEAD
     permission_classes = [IsAdminOrCoordinatorForStudents]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 
     def delete(self, request, pk):
 
@@ -307,7 +342,11 @@ class StudentDeleteView(APIView):
 
 class StudentTransferView(APIView):
 
+<<<<<<< HEAD
     permission_classes = [IsAdminOrCoordinatorForStudents]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 
     @transaction.atomic
     def post(self, request):
@@ -363,6 +402,7 @@ class StudentTransferListView(APIView):
 
     def get(self, request):
 
+<<<<<<< HEAD
         if request.user.role not in [
             CustomUser.Role.SUPER_ADMIN,
             CustomUser.Role.ACADEMIC_COORDINATOR,
@@ -373,6 +413,8 @@ class StudentTransferListView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
         transfers = StudentTransfer.objects.select_related(
             "student",
             "from_classroom",
@@ -400,6 +442,7 @@ class StudentTransferDetailView(APIView):
 
     def get(self, request, pk):
 
+<<<<<<< HEAD
         if request.user.role not in [
             CustomUser.Role.SUPER_ADMIN,
             CustomUser.Role.ACADEMIC_COORDINATOR,
@@ -410,6 +453,8 @@ class StudentTransferDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
         transfer = get_object_or_404(
             StudentTransfer.objects.select_related(
                 "student",

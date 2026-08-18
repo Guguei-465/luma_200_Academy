@@ -70,6 +70,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
 
     student_name = serializers.SerializerMethodField()
 
+<<<<<<< HEAD
     # The React payment form (RecordPayment.jsx) posts this field name,
     # but the model's matching field is called `external_reference`.
     # Without this explicit mapping, DRF silently drops the incoming
@@ -80,6 +81,8 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         allow_blank=True,
     )
 
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
     class Meta:
         model = FeePayment
         fields = "__all__"
@@ -95,9 +98,12 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             "is_reconciled",
             "created_at",
             "updated_at",
+<<<<<<< HEAD
             # received_by must never come from the client — the view
             # sets it from the logged-in accountant's own profile.
             "received_by",
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
         ]
 
     def get_student_name(self, obj):
@@ -106,6 +112,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             f"{obj.student_fee.student.last_name}"
         )
 
+<<<<<<< HEAD
     def validate(self, data):
         """
         SPEC RULE (fees, T5): amount paid can never exceed the
@@ -157,6 +164,8 @@ class FeePaymentSerializer(serializers.ModelSerializer):
 
         return data
 
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 
 # =====================================================
 # M-Pesa Callback Log

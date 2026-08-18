@@ -204,12 +204,15 @@ class FeePayment(models.Model):
         help_text="Admission number or school payment reference.",
     )
 
+<<<<<<< HEAD
     notes = models.TextField(
         blank=True,
         default="",
         help_text="Free-text note entered by the accountant recording the payment.",
     )
 
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
     mpesa_receipt = models.CharField(
         max_length=50,
         unique=True,

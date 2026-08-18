@@ -9,7 +9,10 @@ from rest_framework.views import APIView
 from accounts.models import (
     CustomUser,
     TeacherProfile,
+<<<<<<< HEAD
     ParentProfile,
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 )
 
 from assignments.models import TeacherAssignment
@@ -758,6 +761,7 @@ class MarkAttendanceView(APIView):
             )
 
             # =================================================
+<<<<<<< HEAD
             # BUSINESS RULE: only notify parents when the
             # student is Absent or Excused. Present attendance
             # is NOT a notification-worthy event.
@@ -767,6 +771,8 @@ class MarkAttendanceView(APIView):
                 continue
 
             # =================================================
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
             # FIND PARENT
             #
             # Student
@@ -1360,14 +1366,19 @@ class StudentAttendanceHistoryView(APIView):
         student = get_object_or_404(
 
             Student.objects.select_related(
+<<<<<<< HEAD
                 "classroom",
                 "parent",
                 "parent__user",
+=======
+                "classroom"
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
             ),
 
             pk=student_id,
         )
 
+<<<<<<< HEAD
         # ----------------------------------------------------
         # SECURITY — this endpoint takes student_id straight
         # from the URL, so ownership MUST be verified here.
@@ -1420,6 +1431,8 @@ class StudentAttendanceHistoryView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
         records = (
             Attendance.objects
             .filter(

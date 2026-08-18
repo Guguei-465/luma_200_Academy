@@ -321,6 +321,7 @@ def UpdateUser(request, id):
     user.is_active = is_active
     user.save()
 
+<<<<<<< HEAD
     # If the role changed, remove the old profile and create the new one.
     #
     # NOTE: TeacherProfile / AccountantProfile / AcademicCoordinatorProfile
@@ -331,6 +332,9 @@ def UpdateUser(request, id):
     # caller the new profile still needs its required details filled in.
     profile_warning = None
 
+=======
+    # If the role changed, remove the old profile and create the new one
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
     if old_role != role:
         old_profile_model = PROFILE_MODELS_BY_ROLE.get(old_role)
 
@@ -340,6 +344,7 @@ def UpdateUser(request, id):
         new_profile_model = PROFILE_MODELS_BY_ROLE.get(role)
 
         if new_profile_model:
+<<<<<<< HEAD
             try:
                 new_profile_model.objects.get_or_create(user=user)
             except IntegrityError:
@@ -369,6 +374,24 @@ def UpdateUser(request, id):
 
     return Response(
         response_data,
+=======
+            new_profile_model.objects.get_or_create(user=user)
+
+    return Response(
+        {
+            "message": "User updated successfully.",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "email": user.email,
+                "phone_number": user.phone_number,
+                "role": user.role,
+                "is_active": user.is_active,
+            },
+        },
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
         status=status.HTTP_200_OK,
     )
 
@@ -632,6 +655,7 @@ class StudentProfileView(generics.RetrieveUpdateAPIView):
 @permission_classes([IsAuthenticated])
 def ParentList(request):
 
+<<<<<<< HEAD
     # Only staff roles that legitimately need the full parent/child
     # roster may see it. Without this check, ANY authenticated user
     # (including a Parent or Teacher) could list every family's data,
@@ -649,6 +673,8 @@ def ParentList(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
     parents = (
         ParentProfile.objects
         .select_related("user")

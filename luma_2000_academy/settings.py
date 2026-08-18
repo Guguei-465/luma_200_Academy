@@ -27,12 +27,19 @@ ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="").split(",")
 # users to have accounts
 AUTH_USER_MODEL = "accounts.CustomUser"
 
+<<<<<<< HEAD
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "https://ryacksonfungo.alwaysdata.net",
     "https://luma-six-xi.vercel.app",
     "http://127.0.0.1:5173",
 ]
+=======
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",
+#     "http://127.0.0.1:5173",
+# ]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
 
 
 
@@ -103,7 +110,11 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+<<<<<<< HEAD
     "https://luma-six-xi.vercel.app",
+=======
+    "https://school-management-system-chi-eight.vercel.app/",
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
     "https://ryacksonfungo.alwaysdata.net",
 ]
 
