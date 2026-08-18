@@ -420,6 +420,10 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
         IsSuperAdminOrAccountant,
     ]
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
     def perform_create(self, serializer):
         # received_by is read-only on the serializer — set it here
         # from the logged-in accountant's own profile so it can
@@ -430,6 +434,11 @@ class FeePaymentViewSet(viewsets.ModelViewSet):
         )
         serializer.save(received_by=accountant_profile)
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     @action(
         detail=False,
         methods=["get"],

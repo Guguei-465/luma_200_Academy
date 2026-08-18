@@ -15,18 +15,38 @@ class ParentChildrenViewSet(viewsets.ReadOnlyModelViewSet):
 
         user = self.request.user
 
+<<<<<<< HEAD
         # Admin/Coordinator/Accountant legitimately need the
         # full roster.
+=======
+<<<<<<< HEAD
+        # Admin/Coordinator/Accountant legitimately need the
+        # full roster.
+=======
+        # Staff can see all students
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         if user.role in [
             user.Role.SUPER_ADMIN,
             user.Role.ACCOUNTANT,
             user.Role.ACADEMIC_COORDINATOR,
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+            user.Role.TEACHER,
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         ]:
             return Student.objects.select_related(
                 "parent__user",
                 "classroom",
             )
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
         # Teachers only see students in classrooms they're
         # actively assigned to — consistent with the scoping
         # enforced in students.views.StudentListView. Without
@@ -53,6 +73,11 @@ class ParentChildrenViewSet(viewsets.ReadOnlyModelViewSet):
                 "classroom",
             )
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         # Find logged-in parent's profile
         parent = ParentProfile.objects.filter(
             user=user

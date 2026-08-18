@@ -2,8 +2,11 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+<<<<<<< HEAD
 from rest_framework.permissions import IsAuthenticated
 
+=======
+>>>>>>> origin/main
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,7 +14,14 @@ from rest_framework.views import APIView
 from accounts.models import (
     CustomUser,
     TeacherProfile,
+<<<<<<< HEAD
     ParentProfile,
+=======
+<<<<<<< HEAD
+    ParentProfile,
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 )
 
 from assignments.models import TeacherAssignment
@@ -68,6 +78,7 @@ def verify_class_teacher(
     """
     Verify that:
 
+<<<<<<< HEAD
     1. Logged-in user is a teacher who owns this assignment
        as an active class teacher — OR the user is a Super
        Admin / Academic Coordinator (who may act on behalf
@@ -115,6 +126,14 @@ def verify_class_teacher(
             None,
         )
 
+=======
+    1. Logged-in user is a teacher.
+    2. Teacher owns the assignment.
+    3. Assignment is marked as Class Teacher.
+    4. Assignment is active.
+    """
+
+>>>>>>> origin/main
     teacher_profile = get_teacher_profile(request)
 
     if not teacher_profile:
@@ -569,6 +588,7 @@ class MarkAttendanceView(APIView):
         )
 
         # ----------------------------------------------------
+<<<<<<< HEAD
         # Teacher / Admin / Coordinator
         #
         # Same override as verify_class_teacher(): admins and
@@ -583,11 +603,20 @@ class MarkAttendanceView(APIView):
             CustomUser.Role.ACADEMIC_COORDINATOR,
         ]
 
+=======
+        # Teacher
+        # ----------------------------------------------------
+
+>>>>>>> origin/main
         teacher_profile = get_teacher_profile(
             request
         )
 
+<<<<<<< HEAD
         if not teacher_profile and not is_admin_or_coordinator:
+=======
+        if not teacher_profile:
+>>>>>>> origin/main
 
             return Response(
                 {
@@ -618,6 +647,7 @@ class MarkAttendanceView(APIView):
             )
 
         # ----------------------------------------------------
+<<<<<<< HEAD
         # Teacher owns assignment / must be class teacher
         #
         # Skipped for Admin/Coordinator — see above.
@@ -648,6 +678,38 @@ class MarkAttendanceView(APIView):
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
+=======
+        # Teacher owns assignment
+        # ----------------------------------------------------
+
+        if assignment.teacher_id != teacher_profile.id:
+
+            return Response(
+                {
+                    "error": (
+                        "This attendance submission "
+                        "does not belong to you."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # ----------------------------------------------------
+        # Must be class teacher
+        # ----------------------------------------------------
+
+        if not assignment.is_class_teacher:
+
+            return Response(
+                {
+                    "error": (
+                        "Only the class teacher can "
+                        "save attendance for this class."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+>>>>>>> origin/main
 
         # ----------------------------------------------------
         # Active assignment
@@ -812,6 +874,10 @@ class MarkAttendanceView(APIView):
             )
 
             # =================================================
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
             # BUSINESS RULE: only notify parents when the
             # student is Absent or Excused. Present attendance
             # is NOT a notification-worthy event.
@@ -821,6 +887,11 @@ class MarkAttendanceView(APIView):
                 continue
 
             # =================================================
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
             # FIND PARENT
             #
             # Student
@@ -1414,14 +1485,28 @@ class StudentAttendanceHistoryView(APIView):
         student = get_object_or_404(
 
             Student.objects.select_related(
+<<<<<<< HEAD
                 "classroom",
                 "parent",
                 "parent__user",
+=======
+<<<<<<< HEAD
+                "classroom",
+                "parent",
+                "parent__user",
+=======
+                "classroom"
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
             ),
 
             pk=student_id,
         )
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
         # ----------------------------------------------------
         # SECURITY — this endpoint takes student_id straight
         # from the URL, so ownership MUST be verified here.
@@ -1474,6 +1559,11 @@ class StudentAttendanceHistoryView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         records = (
             Attendance.objects
             .filter(
@@ -1492,6 +1582,7 @@ class StudentAttendanceHistoryView(APIView):
             )
         )
 
+<<<<<<< HEAD
         # =============================================
         # QUERY-PARAM FILTERS
         #
@@ -1516,6 +1607,8 @@ class StudentAttendanceHistoryView(APIView):
                 submission__date__lte=end_date
             )
 
+=======
+>>>>>>> origin/main
         serializer = StudentAttendanceHistorySerializer(
             records,
             many=True,
@@ -1638,6 +1731,7 @@ class TeacherAttendanceHistoryView(APIView):
             )
         )
 
+<<<<<<< HEAD
         # =============================================
         # QUERY-PARAM FILTERS
         #
@@ -1668,6 +1762,8 @@ class TeacherAttendanceHistoryView(APIView):
                 submission__date__lte=end_date
             )
 
+=======
+>>>>>>> origin/main
         data = []
 
         for record in records:
@@ -1747,6 +1843,7 @@ class TeacherAttendanceHistoryView(APIView):
         return Response(
             data,
             status=status.HTTP_200_OK,
+<<<<<<< HEAD
         )
 
 # ============================================================
@@ -1837,3 +1934,6 @@ class AttendanceReportView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+=======
+        )
+>>>>>>> origin/main

@@ -17,6 +17,7 @@ User = get_user_model()
 # ==========================================
 class UserSerializer(serializers.ModelSerializer):
 
+<<<<<<< HEAD
     # =================================================
     # Whether this user's role-specific profile record
     # (TeacherProfile / ParentProfile / StudentProfile /
@@ -32,6 +33,8 @@ class UserSerializer(serializers.ModelSerializer):
     # =================================================
     has_profile = serializers.SerializerMethodField()
 
+=======
+>>>>>>> origin/main
     class Meta:
         model = User
         fields = [
@@ -44,12 +47,16 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "profile_picture",
             "is_active",
+<<<<<<< HEAD
             "has_profile",
+=======
+>>>>>>> origin/main
             "created_at",
         ]
 
         read_only_fields = [
             "id",
+<<<<<<< HEAD
             "has_profile",
             "created_at",
         ]
@@ -70,6 +77,11 @@ class UserSerializer(serializers.ModelSerializer):
 
         return hasattr(obj, profile_attr)
 
+=======
+            "created_at",
+        ]
+
+>>>>>>> origin/main
 
 # ==========================================
 # Registration Serializer
@@ -252,11 +264,21 @@ class ParentProfileSerializer(serializers.ModelSerializer):
 
 
 # ==========================================
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
 # Teacher Profile Serializer (FULL — self-view/edit + admin-only detail)
 #
 # Includes sensitive fields (national_id, date_of_birth). Only ever
 # expose this to: the teacher themselves, or SUPER_ADMIN /
 # ACADEMIC_COORDINATOR in an admin-restricted view.
+<<<<<<< HEAD
+=======
+=======
+# Teacher Profile Serializer
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 # ==========================================
 class TeacherProfileSerializer(serializers.ModelSerializer):
 
@@ -268,6 +290,10 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
 
 
 # ==========================================
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
 # Teacher Profile Serializer (PUBLIC — dropdowns / cross-role listings)
 #
 # Used anywhere a non-admin authenticated user (e.g. building a class
@@ -292,6 +318,11 @@ class TeacherProfilePublicSerializer(serializers.ModelSerializer):
 
 
 # ==========================================
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 # Accountant Profile Serializer
 # ==========================================
 class AccountantProfileSerializer(serializers.ModelSerializer):
@@ -334,4 +365,24 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             "date_of_birth",
             "created_at",
             "updated_at",
+<<<<<<< HEAD
         ]
+=======
+<<<<<<< HEAD
+        ]
+=======
+        ]
+
+# ==========================================
+# Teacher Profile Serializer
+# ==========================================
+
+class TeacherProfileSerializer(serializers.ModelSerializer):
+
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = TeacherProfile
+        fields = "__all__"
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main

@@ -1,6 +1,10 @@
 from rest_framework import serializers
 
+<<<<<<< HEAD
 from accounts.models import CustomUser, ParentProfile
+=======
+from accounts.models import ParentProfile
+>>>>>>> origin/main
 from students.models import Student, StudentTransfer
 
 
@@ -13,7 +17,10 @@ class StudentSerializer(serializers.ModelSerializer):
     classroom_name = serializers.SerializerMethodField()
     class_teacher = serializers.SerializerMethodField()
     parent_name = serializers.SerializerMethodField()
+<<<<<<< HEAD
     username = serializers.SerializerMethodField()
+=======
+>>>>>>> origin/main
 
     # =================================================
     # Parent phone number
@@ -24,6 +31,7 @@ class StudentSerializer(serializers.ModelSerializer):
 
     phone_number = serializers.CharField(
         write_only=True,
+<<<<<<< HEAD
         required=False,
     )
 
@@ -44,6 +52,9 @@ class StudentSerializer(serializers.ModelSerializer):
         ),
         required=False,
         allow_null=True,
+=======
+        required=True
+>>>>>>> origin/main
     )
 
     class Meta:
@@ -51,8 +62,11 @@ class StudentSerializer(serializers.ModelSerializer):
 
         fields = [
             "id",
+<<<<<<< HEAD
             "user",
             "username",
+=======
+>>>>>>> origin/main
             "admission_number",
             "assessment_number",
             "first_name",
@@ -84,6 +98,7 @@ class StudentSerializer(serializers.ModelSerializer):
             "classroom_name",
             "class_teacher",
             "parent_name",
+<<<<<<< HEAD
             "username",
         ]
 
@@ -121,6 +136,11 @@ class StudentSerializer(serializers.ModelSerializer):
         return value
 
     # =================================================
+=======
+        ]
+
+    # =================================================
+>>>>>>> origin/main
     # Classroom name
     # =================================================
 
@@ -186,11 +206,23 @@ class StudentSerializer(serializers.ModelSerializer):
     # Student.parent
     # =================================================
 
+<<<<<<< HEAD
     def _resolve_parent(self, phone_number):
 
         try:
 
             return ParentProfile.objects.get(
+=======
+    def create(self, validated_data):
+
+        phone_number = validated_data.pop(
+            "phone_number"
+        )
+
+        try:
+
+            parent = ParentProfile.objects.get(
+>>>>>>> origin/main
                 user__phone_number=phone_number
             )
 
@@ -201,6 +233,7 @@ class StudentSerializer(serializers.ModelSerializer):
                     "No parent account was found with this phone number."
             })
 
+<<<<<<< HEAD
     def create(self, validated_data):
 
         phone_number = validated_data.pop(
@@ -216,6 +249,8 @@ class StudentSerializer(serializers.ModelSerializer):
 
         parent = self._resolve_parent(phone_number)
 
+=======
+>>>>>>> origin/main
         student = Student.objects.create(
             parent=parent,
             **validated_data
@@ -223,6 +258,7 @@ class StudentSerializer(serializers.ModelSerializer):
 
         return student
 
+<<<<<<< HEAD
     def update(self, instance, validated_data):
 
         # phone_number is optional on update — only re-link the
@@ -239,6 +275,8 @@ class StudentSerializer(serializers.ModelSerializer):
 
         return instance
 
+=======
+>>>>>>> origin/main
 
 # =====================================================
 # Student List Serializer
@@ -249,15 +287,21 @@ class StudentListSerializer(serializers.ModelSerializer):
     classroom_name = serializers.SerializerMethodField()
     class_teacher = serializers.SerializerMethodField()
     parent_name = serializers.SerializerMethodField()
+<<<<<<< HEAD
     username = serializers.SerializerMethodField()
+=======
+>>>>>>> origin/main
 
     class Meta:
         model = Student
 
         fields = [
             "id",
+<<<<<<< HEAD
             "user",
             "username",
+=======
+>>>>>>> origin/main
             "admission_number",
             "assessment_number",
             "first_name",
@@ -281,6 +325,7 @@ class StudentListSerializer(serializers.ModelSerializer):
 
         read_only_fields = fields
 
+<<<<<<< HEAD
     def get_username(self, obj):
 
         if obj.user:
@@ -288,6 +333,8 @@ class StudentListSerializer(serializers.ModelSerializer):
 
         return None
 
+=======
+>>>>>>> origin/main
     # =================================================
     # Classroom name
     # =================================================

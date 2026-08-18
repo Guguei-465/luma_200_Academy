@@ -130,6 +130,10 @@ class TopOutstandingStudentsAPIView(APIView):
 
 class DashboardAPIView(APIView):
     """Main Dashboard Statistics"""
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
     # BUG FIX: DRF combines multiple permission_classes with AND
     # logic (every class must return True), not OR. With
     # [IsAcademicCoordinator, IsSuperAdmin], an Academic Coordinator
@@ -138,6 +142,12 @@ class DashboardAPIView(APIView):
     # IsAcademicCoordinator already covers Super Admin + Academic
     # Coordinator, so it alone is correct.
     permission_classes = [IsAcademicCoordinator]
+<<<<<<< HEAD
+=======
+=======
+    permission_classes = [IsAcademicCoordinator, IsSuperAdmin]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 
     def get(self, request):
         total_students = Student.objects.count()
@@ -522,6 +532,40 @@ class ParentChildDetailsAPIView(APIView):
         return Response(serializer.data)
 
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+=======
+class TeacherDashboardAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsTeacher]
+
+    def get(self, request):
+        teacher = request.user.teacher_profile
+        assignments = TeacherAssignment.objects.filter(teacher=teacher, is_active=True)
+
+        data = {
+            "teacher_name": request.user.get_full_name(),
+            "is_class_teacher": is_class_teacher(request.user),
+            "total_assignments": assignments.count(),
+            "total_subjects": assignments.values("subject").distinct().count(),
+            "total_classes": assignments.values("classroom").distinct().count(),
+            "pending_results": ResultSubmission.objects.filter(
+                submitted_by=request.user,
+                approval_status__in=[
+                    ResultSubmission.ApprovalStatus.DRAFT,
+                    ResultSubmission.ApprovalStatus.RETURNED,
+                ],
+            ).count(),
+        }
+        return Response(data)
+
+
+# ==========================================
+# Teacher Students — COMPLETED
+# ==========================================
+
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 class TeacherStudentsAPIView(APIView):
     permission_classes = [IsAuthenticated, IsTeacher]
 
@@ -590,14 +634,28 @@ class TeacherStudentDetailsAPIView(APIView):
         ).values_list("classroom_id", flat=True)
 
         student = get_object_or_404(
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
             Student.objects.select_related(
                 "classroom",
                 "parent__user",
             ),
+<<<<<<< HEAD
+=======
+=======
+            Student.objects.select_related("classroom"),
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
             pk=pk,
             classroom_id__in=classroom_ids,
         )
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
         # BUG FIX: Student has no parent_name/parent_phone fields —
         # this crashed with AttributeError on every request. Derive
         # from the related ParentProfile/User instead.
@@ -630,6 +688,11 @@ class TeacherStudentDetailsAPIView(APIView):
             .first()
         )
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         data = {
             "id": student.id,
             "photo": student.photo,
@@ -642,6 +705,10 @@ class TeacherStudentDetailsAPIView(APIView):
             "grade": student.classroom.grade,
             "stream": student.classroom.stream,
             "date_admitted": student.date_admitted,
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
             "parent_name": parent_name,
             "parent_phone": parent_phone,
             "attendance_percentage": attendance_percentage,
@@ -650,6 +717,15 @@ class TeacherStudentDetailsAPIView(APIView):
                 if latest_result and latest_result.overall_grade
                 else "-"
             ),
+<<<<<<< HEAD
+=======
+=======
+            "parent_name": student.parent_name,
+            "parent_phone": student.parent_phone,
+            "attendance_percentage": 0,
+            "latest_grade": "-",
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
             "class_teacher": is_class_teacher(request.user),
         }
 
@@ -836,6 +912,10 @@ class TeacherSaveAssessmentMarksAPIView(APIView):
 
     def post(self, request, pk):
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
         assessment = get_object_or_404(
             Assessment.objects.select_related("classroom", "subject"),
             pk=pk,
@@ -864,12 +944,22 @@ class TeacherSaveAssessmentMarksAPIView(APIView):
                 {"detail": "You are not assigned to this class/subject."},
                 status=403,
             )
+<<<<<<< HEAD
+=======
+=======
+        assessment = get_object_or_404(Assessment, pk=pk)
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 
         submission, _ = ResultSubmission.objects.get_or_create(
             assessment=assessment,
             defaults={"submitted_by": request.user},
         )
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
         # ---------------------------------------------
         # BUG FIX — this previously called a local
         # calculate_grade() that returns a plain string,
@@ -890,10 +980,19 @@ class TeacherSaveAssessmentMarksAPIView(APIView):
             process_result,
         )
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         for item in request.data.get("students", []):
 
             student = Student.objects.get(pk=item["student_id"])
             marks = item["marks"]
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
 
             percentage = calculate_percentage(
                 marks, assessment.total_marks
@@ -901,25 +1000,68 @@ class TeacherSaveAssessmentMarksAPIView(APIView):
             grade_scale = get_grade(percentage)
 
             result, _ = Result.objects.update_or_create(
+<<<<<<< HEAD
+=======
+=======
+            grade = calculate_grade(marks)
+
+            Result.objects.update_or_create(
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
                 submission=submission,
                 student=student,
                 defaults={
                     "marks": marks,
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
                     "weighted_marks": percentage,
                     "grade": grade_scale,
                     "cbc_code": grade_scale.level if grade_scale else "",
                     "cbc_description": (
                         grade_scale.description if grade_scale else ""
                     ),
+<<<<<<< HEAD
+=======
+=======
+                    "weighted_marks": marks,
+                    "grade": grade,
+                    "cbc_code": grade.level if grade else "",
+                    "cbc_description": grade.description if grade else "",
+                    "grade_remarks": grade.remarks if grade else "",
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
                     "entered_by": request.user,
                     "last_modified_by": request.user,
                     "status": Result.ResultStatus.PRESENT,
                 },
             )
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
 
             # No-ops until the submission is approved, matching
             # the same workflow results.views.ResultViewSet uses.
             process_result(result)
+<<<<<<< HEAD
+=======
+=======
+            calculate_student_subject_result(student, assessment)
+            calculate_student_term_result(
+                student,
+                assessment.classroom,
+                assessment.term,
+                assessment.academic_year,
+            )
+            calculate_class_positions(
+                assessment.classroom,
+                assessment.term,
+                assessment.academic_year,
+            )
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 
         return Response({"message": "Marks saved successfully."})
 

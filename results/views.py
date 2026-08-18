@@ -3,7 +3,14 @@ from django.utils import timezone
 
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
+<<<<<<< HEAD
 from rest_framework.exceptions import PermissionDenied
+=======
+<<<<<<< HEAD
+from rest_framework.exceptions import PermissionDenied
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -102,6 +109,10 @@ class AssessmentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
         # A Teacher (as opposed to Academic Coordinator) must be
         # assigned to the classroom/subject they're creating an
         # assessment for — otherwise a teacher could fabricate
@@ -125,6 +136,11 @@ class AssessmentViewSet(viewsets.ModelViewSet):
                     "You are not assigned to this class/subject."
                 )
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         serializer.save(
             created_by=self.request.user
         )
@@ -187,6 +203,10 @@ class ResultSubmissionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
         # Same T2 assignment check for teachers creating a
         # ResultSubmission directly against an assessment.
         if getattr(self.request.user, "role", None) == "TEACHER":
@@ -209,6 +229,11 @@ class ResultSubmissionViewSet(viewsets.ModelViewSet):
                         "You are not assigned to this class/subject."
                     )
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         serializer.save(
             submitted_by=self.request.user
         )
@@ -416,6 +441,10 @@ class ResultViewSet(viewsets.ModelViewSet):
     ]
 
     # =================================================
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
     # SECURITY HELPER
     #
     # SPEC (T2 — Marks Entry Security):
@@ -454,15 +483,29 @@ class ResultViewSet(viewsets.ModelViewSet):
             )
 
     # =================================================
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     # CREATE
     # =================================================
 
     def perform_create(self, serializer):
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
         submission = serializer.validated_data.get("submission")
 
         self._verify_teacher_assigned_to_submission(submission)
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         result = serializer.save(
             entered_by=self.request.user,
             last_modified_by=self.request.user,
@@ -674,6 +717,10 @@ class ResultViewSet(viewsets.ModelViewSet):
             )
 
         # ---------------------------------------------
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
         # SECURITY (T2) — see _verify_teacher_assigned_to_submission
         # above. Same gap applies here: this is the endpoint the
         # marks-entry screen actually calls, and without this check
@@ -684,6 +731,11 @@ class ResultViewSet(viewsets.ModelViewSet):
         self._verify_teacher_assigned_to_submission(submission)
 
         # ---------------------------------------------
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         # Approved submissions are locked
         # ---------------------------------------------
 

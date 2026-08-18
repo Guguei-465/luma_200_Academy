@@ -1,6 +1,9 @@
 from django.contrib.auth import authenticate
 from django.db import IntegrityError
+<<<<<<< HEAD
 from django.db.models import Q
+=======
+>>>>>>> origin/main
 from rest_framework.exceptions import NotFound
 from rest_framework import permissions, generics
 from rest_framework.decorators import api_view, permission_classes
@@ -27,11 +30,15 @@ from .models import (
     AccountantProfile,
     AcademicCoordinatorProfile,
 )
+<<<<<<< HEAD
 from students.models import Student
+=======
+>>>>>>> origin/main
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
  
+<<<<<<< HEAD
 # NOTE: A STUDENT's login account gets a StudentProfile (basic bio,
 # same as every other role) via this mapping. Their CLASSROOM/PARENT
 # link lives on `students.Student.user` instead (see students app),
@@ -39,12 +46,21 @@ from django.core.exceptions import ValidationError
 # login-side StudentProfile below is still required, otherwise a
 # STUDENT-role account is created with literally no profile at all,
 # which is exactly the "some users have no profile" bug.
+=======
+# after deleting old model
+# NOTE: Student records are managed by the dedicated `students` app.
+# The `students.Student` model has no `user` FK, so it is intentionally
+# excluded from this role-based profile mapping.
+>>>>>>> origin/main
 PROFILE_MODELS = {
     CustomUser.Role.PARENT: ParentProfile,
     CustomUser.Role.TEACHER: TeacherProfile,
     CustomUser.Role.ACCOUNTANT: AccountantProfile,
     CustomUser.Role.ACADEMIC_COORDINATOR: AcademicCoordinatorProfile,
+<<<<<<< HEAD
     CustomUser.Role.STUDENT: StudentProfile,
+=======
+>>>>>>> origin/main
 }
 # Reverse lookup for deleting old profiles
 PROFILE_MODELS_BY_ROLE = PROFILE_MODELS
@@ -210,6 +226,7 @@ def Register(request):
                     employee_number=request.data.get("employee_number"),
                 )
 
+<<<<<<< HEAD
             elif user.role == CustomUser.Role.STUDENT:
                 StudentProfile.objects.create(
                     user=user,
@@ -219,6 +236,8 @@ def Register(request):
                     date_of_birth=request.data.get("date_of_birth"),
                 )
 
+=======
+>>>>>>> origin/main
             return Response(
                 {
                     "message": "User account created successfully.",
@@ -254,6 +273,7 @@ def UserList(request):
 
     users = CustomUser.objects.order_by("id")
 
+<<<<<<< HEAD
     # =============================================
     # QUERY-PARAM FILTERS
     #
@@ -284,6 +304,8 @@ def UserList(request):
             | Q(phone_number__icontains=search)
         )
 
+=======
+>>>>>>> origin/main
     serializer = UserSerializer(users, many=True)
     return Response(serializer.data)
 
@@ -366,6 +388,10 @@ def UpdateUser(request, id):
     user.is_active = is_active
     user.save()
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
     # If the role changed, remove the old profile and create the new one.
     #
     # NOTE: TeacherProfile / AccountantProfile / AcademicCoordinatorProfile
@@ -376,6 +402,12 @@ def UpdateUser(request, id):
     # caller the new profile still needs its required details filled in.
     profile_warning = None
 
+<<<<<<< HEAD
+=======
+=======
+    # If the role changed, remove the old profile and create the new one
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     if old_role != role:
         old_profile_model = PROFILE_MODELS_BY_ROLE.get(old_role)
 
@@ -385,6 +417,10 @@ def UpdateUser(request, id):
         new_profile_model = PROFILE_MODELS_BY_ROLE.get(role)
 
         if new_profile_model:
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
             try:
                 new_profile_model.objects.get_or_create(user=user)
             except IntegrityError:
@@ -414,6 +450,27 @@ def UpdateUser(request, id):
 
     return Response(
         response_data,
+<<<<<<< HEAD
+=======
+=======
+            new_profile_model.objects.get_or_create(user=user)
+
+    return Response(
+        {
+            "message": "User updated successfully.",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "email": user.email,
+                "phone_number": user.phone_number,
+                "role": user.role,
+                "is_active": user.is_active,
+            },
+        },
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
         status=status.HTTP_200_OK,
     )
 
@@ -677,6 +734,10 @@ class StudentProfileView(generics.RetrieveUpdateAPIView):
 @permission_classes([IsAuthenticated])
 def ParentList(request):
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
     # Only staff roles that legitimately need the full parent/child
     # roster may see it. Without this check, ANY authenticated user
     # (including a Parent or Teacher) could list every family's data,
@@ -694,6 +755,11 @@ def ParentList(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     parents = (
         ParentProfile.objects
         .select_related("user")
@@ -701,6 +767,7 @@ def ParentList(request):
         .order_by("user__first_name", "user__last_name")
     )
 
+<<<<<<< HEAD
     # =============================================
     # QUERY-PARAM FILTERS: ?search=name/phone/email
     # =============================================
@@ -715,6 +782,8 @@ def ParentList(request):
             | Q(user__email__icontains=search)
         )
 
+=======
+>>>>>>> origin/main
     serializer = ParentProfileSerializer(
         parents,
         many=True
@@ -786,6 +855,7 @@ class TeacherProfilesListView(generics.ListAPIView):
                 "user__last_name",
                 "id",
             )
+<<<<<<< HEAD
         )
 
     # =============================================
@@ -813,3 +883,6 @@ class TeacherProfilesListView(generics.ListAPIView):
             queryset = queryset.filter(gender=gender)
 
         return queryset
+=======
+        )
+>>>>>>> origin/main

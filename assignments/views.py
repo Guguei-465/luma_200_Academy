@@ -8,7 +8,14 @@ from .serializers import (
     TeacherAssignmentSerializer,
     TeacherProfileSerializer,
 )
+<<<<<<< HEAD
 from accounts.serializers import TeacherProfilePublicSerializer
+=======
+<<<<<<< HEAD
+from accounts.serializers import TeacherProfilePublicSerializer
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 from accounts.permisions import IsAdminOrAcademicCoordinator
 
 
@@ -20,12 +27,25 @@ class TeacherProfileListView(generics.ListAPIView):
     """
     Returns teachers who have active assignments.
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
     Open to any authenticated user (used for dropdowns across roles),
     so this MUST use the public serializer — it excludes national_id
     and date_of_birth to avoid leaking teacher PII to Parents/Students.
     """
 
     serializer_class = TeacherProfilePublicSerializer
+<<<<<<< HEAD
+=======
+=======
+    Used mainly by Academic Coordinator/Admin dropdowns.
+    """
+
+    serializer_class = TeacherProfileSerializer
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):

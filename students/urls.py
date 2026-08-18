@@ -10,8 +10,11 @@ from .views import (
     StudentUpdateView,
     StudentDeleteView,
     ParentChildrenView,
+<<<<<<< HEAD
     MyStudentRecordView,
     UnlinkedStudentUsersView,
+=======
+>>>>>>> origin/main
 )
 
 
@@ -28,6 +31,7 @@ urlpatterns = [
     ),
 
     path(
+<<<<<<< HEAD
         "me/",
         MyStudentRecordView.as_view(),
         name="student-me"
@@ -40,6 +44,8 @@ urlpatterns = [
     ),
 
     path(
+=======
+>>>>>>> origin/main
         "<int:pk>/",
         StudentDetailView.as_view(),
         name="student-detail"

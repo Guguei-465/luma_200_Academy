@@ -43,6 +43,10 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
                 Q(target=Announcement.Target.TEACHERS)
             )
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
         # Writer roles (Admin/Coordinator/Accountant) manage
         # announcements, so they need the FULL queryset — not
         # audience-filtered — otherwise get_object() (used by
@@ -52,6 +56,21 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         # branch was missing Q(target=TEACHERS) entirely, which
         # broke editing/deleting Teacher-targeted announcements.
         return super().get_queryset()
+<<<<<<< HEAD
+=======
+=======
+        # All other staff/accountant/admin: show everything they can see AND their own
+        return super().get_queryset().filter(
+            is_active=True
+        ).filter(
+            Q(target=Announcement.Target.ALL_USERS) |
+            Q(target=Announcement.Target.STAFF) |
+            Q(target=Announcement.Target.PARENTS) |
+            Q(recipient=user) |
+            Q(created_by=user)
+        ).distinct()
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 
     def get_permissions(self):
         if self.action in ["create", "update", "partial_update", "destroy"]:

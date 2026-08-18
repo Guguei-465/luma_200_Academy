@@ -92,6 +92,10 @@ class TimetableSerializer(serializers.ModelSerializer):
     # META
     # =====================================================
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
     # =====================================================
     # VALIDATION
     #
@@ -122,6 +126,11 @@ class TimetableSerializer(serializers.ModelSerializer):
 
         return attrs
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     class Meta:
         model = Timetable
 

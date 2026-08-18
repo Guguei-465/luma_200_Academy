@@ -20,6 +20,7 @@ class Student(models.Model):
         TRANSFERRED = "Transferred", "Transferred"
         GRADUATED = "Graduated", "Graduated"
 
+<<<<<<< HEAD
     # =================================================
     # LOGIN ACCOUNT LINK
     #
@@ -41,6 +42,8 @@ class Student(models.Model):
         limit_choices_to={"role": "STUDENT"},
     )
 
+=======
+>>>>>>> origin/main
     admission_number = models.CharField(
         max_length=20,
         unique=True,

@@ -7,7 +7,10 @@ from .views import (
     AttendanceDetailView,
     StudentAttendanceHistoryView,
     TeacherAttendanceHistoryView,
+<<<<<<< HEAD
     AttendanceReportView,
+=======
+>>>>>>> origin/main
 )
 
 
@@ -74,6 +77,7 @@ urlpatterns = [
         TeacherAttendanceHistoryView.as_view(),
         name="teacher-attendance-history",
     ),
+<<<<<<< HEAD
 
     # ========================================================
     # ADMIN / COORDINATOR REPORT
@@ -84,4 +88,6 @@ urlpatterns = [
         AttendanceReportView.as_view(),
         name="attendance-report",
     ),
+=======
+>>>>>>> origin/main
 ]

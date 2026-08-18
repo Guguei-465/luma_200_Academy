@@ -27,6 +27,10 @@ from reports.serializers import (
 )
 from students.models import Student
 from subjects.models import Subject
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> origin/main
 from reports.permissions import (
     IsAcademicCoordinator,
     IsAccountant,
@@ -53,6 +57,11 @@ from reports.permissions import (
 #     exports, parent fee/balance reports) -> IsAccountant
 #     (Super Admin + Accountant)
 # =========================================================
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
 
 # === Constants ===
 DATE_FORMAT = "%Y-%m-%d"
@@ -92,7 +101,15 @@ def get_payment_qs(date_from, date_to, term=None):
 # STUDENT REPORTS
 # =========================================================
 class StudentSummaryReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         total = Student.objects.count()
         male = Student.objects.filter(gender__iexact="Male").count()
@@ -102,7 +119,15 @@ class StudentSummaryReport(APIView):
         }).data)
 
 class StudentsByClassReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         report = (
             Student.objects.values("classroom__grade", "classroom__stream")
@@ -117,7 +142,15 @@ class StudentsByClassReport(APIView):
         return Response(StudentsByClassSerializer(data, many=True).data)
 
 class StudentsByGenderReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         report = Student.objects.values("gender").annotate(
             total_students=Count("id")
@@ -125,7 +158,15 @@ class StudentsByGenderReport(APIView):
         return Response(StudentGenderReportSerializer(report, many=True).data)
 
 class NewAdmissionsReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         days = int(request.query_params.get("days", 30))
         start_date = timezone.now().date() - timedelta(days=days)
@@ -141,7 +182,15 @@ class NewAdmissionsReport(APIView):
         return Response(NewAdmissionSerializer(data, many=True).data)
 
 class StudentStatusReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         report = Student.objects.values("status").annotate(
             total_students=Count("id")
@@ -152,7 +201,15 @@ class StudentStatusReport(APIView):
 # TEACHER REPORTS
 # =========================================================
 class TeacherSummaryReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         total = TeacherProfile.objects.count()
         male = TeacherProfile.objects.filter(gender__iexact="Male").count()
@@ -162,7 +219,15 @@ class TeacherSummaryReport(APIView):
         }).data)
 
 class TeachersByClassReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         classrooms = ClassRoom.objects.select_related(
             "class_teacher__user"
@@ -176,7 +241,15 @@ class TeachersByClassReport(APIView):
         return Response(TeachersByClassSerializer(data, many=True).data)
 
 class TeachersBySubjectReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         assignments = TeacherAssignment.objects.select_related(
             "teacher__user", "subject", "classroom"
@@ -189,7 +262,15 @@ class TeachersBySubjectReport(APIView):
         return Response(TeachersBySubjectSerializer(data, many=True).data)
 
 class TeacherWorkloadReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         workload = TeacherAssignment.objects.values(
             "teacher__user__first_name", "teacher__user__last_name", "teacher__user__username"
@@ -210,12 +291,28 @@ class TeacherWorkloadReport(APIView):
 # FEE REPORTS
 # =========================================================
 class FeeSummaryReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAccountant]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAccountant]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         return Response(FeeSummarySerializer(get_fee_summary()).data)
 
 class OutstandingBalancesReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAccountant]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAccountant]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         accounts = StudentFee.objects.filter(balance__gt=0).select_related(
             "student", "student__classroom", "fee_structure"
@@ -234,7 +331,15 @@ class OutstandingBalancesReport(APIView):
         return Response(OutstandingBalanceSerializer(data, many=True).data)
 
 class FeeCollectionByTermReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAccountant]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAccountant]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         report = StudentFee.objects.values(
             "fee_structure__academic_year", "fee_structure__term"
@@ -254,7 +359,15 @@ class FeeCollectionByTermReport(APIView):
         return Response(FeeCollectionByTermSerializer(data, many=True).data)
 
 class MonthlyFeeCollectionReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAccountant]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAccountant]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         report = FeePayment.objects.annotate(
             year=ExtractYear("payment_date"), month=ExtractMonth("payment_date")
@@ -267,7 +380,15 @@ class MonthlyFeeCollectionReport(APIView):
 # PARENT REPORTS
 # =========================================================
 class ParentSummaryReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         total = ParentProfile.objects.count()
         counts = ParentProfile.objects.annotate(cc=Count("students"))
@@ -279,7 +400,15 @@ class ParentSummaryReport(APIView):
         }).data)
 
 class ParentContactReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         parents = ParentProfile.objects.select_related("user").annotate(
             total_children=Count("students")
@@ -294,7 +423,15 @@ class ParentContactReport(APIView):
         return Response(ParentContactSerializer(data, many=True).data)
 
 class ParentChildrenReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         parents = ParentProfile.objects.select_related("user").prefetch_related(
             "students__classroom"
@@ -315,7 +452,15 @@ class ParentChildrenReport(APIView):
         return Response(ParentChildrenSerializer(data, many=True).data)
 
 class ParentFeeReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAccountant]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAccountant]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         parents = ParentProfile.objects.select_related("user").annotate(
             total_children=Count("students")
@@ -331,7 +476,15 @@ class ParentFeeReport(APIView):
         return Response(ParentFeeReportSerializer(data, many=True).data)
 
 class ParentsWithOutstandingBalancesReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAccountant]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAccountant]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         parents = ParentProfile.objects.select_related("user").annotate(
             total_children=Count("students")
@@ -351,7 +504,15 @@ class ParentsWithOutstandingBalancesReport(APIView):
 # CLASS & SCHOOL SUMMARY
 # =========================================================
 class ClassCapacityReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         rooms = ClassRoom.objects.annotate(
             current_students=Count("students")
@@ -365,7 +526,15 @@ class ClassCapacityReport(APIView):
         return Response(ClassCapacityReportSerializer(data, many=True).data)
 
 class SchoolSummaryReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         return Response(SchoolSummarySerializer({
             "total_students": Student.objects.count(),
@@ -375,7 +544,15 @@ class SchoolSummaryReport(APIView):
         }).data)
 
 class DashboardStatisticsReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAcademicCoordinator]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAcademicCoordinator]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         fs = get_fee_summary()
         data = {
@@ -403,7 +580,15 @@ class DashboardStatisticsReport(APIView):
 # FINANCIAL REPORTS
 # =========================================================
 class FinancialReport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAccountant]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAccountant]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         report_type = request.query_params.get("type", "income")
         date_from_str = request.query_params.get("date_from")
@@ -464,7 +649,15 @@ class FinancialReport(APIView):
 # FINANCIAL REPORT EXPORT
 # =========================================================
 class FinancialReportExport(APIView):
+<<<<<<< HEAD
     permission_classes = [IsAccountant]
+=======
+<<<<<<< HEAD
+    permission_classes = [IsAccountant]
+=======
+    permission_classes = [IsAuthenticated]
+>>>>>>> 15336f206b5e6fa74b9d0088b7591925a63cc45d
+>>>>>>> origin/main
     def get(self, request):
         report_type = request.query_params.get("type", "income")
         date_from_str = request.query_params.get("date_from")
