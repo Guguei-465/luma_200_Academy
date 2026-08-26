@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 
 class ClassRoom(models.Model):
     class Grade(models.TextChoices):
+        DAY_CARE="Day Care", "Day Care"
         PP1 = "PP1", "PP1"
         PP2 = "PP2", "PP2"
         GRADE_1 = "Grade 1", "Grade 1"
