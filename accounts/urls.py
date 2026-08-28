@@ -162,6 +162,11 @@ urlpatterns = [
         StudentProfileView.as_view(),
         name="student-profile",
     ),
+    path(
+        "student-profile/<int:pk>/",
+        StudentProfileView.as_view(),
+        name="student-profile-detail",
+    ),
 
 
     # =====================================================
