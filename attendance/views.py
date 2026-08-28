@@ -1365,7 +1365,6 @@ class StudentAttendanceHistoryView(APIView):
 # ============================================================
 # TEACHER ATTENDANCE HISTORY
 # ============================================================
-
 class TeacherAttendanceHistoryView(APIView):
 
     permission_classes = [
@@ -1402,8 +1401,27 @@ class TeacherAttendanceHistoryView(APIView):
                 "student",
                 "submission",
                 "submission__classroom",
+
+                # ==========================================
+                # GET ASSIGNMENT
+                # ==========================================
+
                 "submission__assignment",
+
+                # ==========================================
+                # GET SUBJECT
+                # ==========================================
+
                 "submission__assignment__subject",
+
+                # ==========================================
+                # GET CLASS TEACHER
+                # TeacherAssignment.teacher
+                # TeacherProfile.user
+                # ==========================================
+
+                "submission__assignment__teacher",
+                "submission__assignment__teacher__user",
             )
             .order_by(
                 "-submission__date",
@@ -1459,6 +1477,10 @@ class TeacherAttendanceHistoryView(APIView):
 
         for record in records:
 
+            # =================================================
+            # STUDENT NAME
+            # =================================================
+
             student_name = (
                 f"{record.student.first_name or ''} "
                 f"{record.student.last_name or ''}"
@@ -1470,6 +1492,10 @@ class TeacherAttendanceHistoryView(APIView):
                     f"Student #{record.student_id}"
                 )
 
+            # =================================================
+            # CLASSROOM
+            # =================================================
+
             classroom_name = (
                 str(
                     record.submission.classroom
@@ -1478,20 +1504,126 @@ class TeacherAttendanceHistoryView(APIView):
                 else "Unknown Class"
             )
 
+            # =================================================
+            # ASSIGNMENT
+            # =================================================
+
+            assignment = (
+                record.submission.assignment
+            )
+
+            # =================================================
+            # SUBJECT
+            # =================================================
+
             subject_name = ""
 
             if (
-                record.submission.assignment
-                and record.submission.assignment.subject
+                assignment
+                and assignment.subject
             ):
 
                 subject_name = (
-                    record
-                    .submission
-                    .assignment
+                    assignment
                     .subject
                     .name
                 )
+
+            # =================================================
+            # MARKED BY
+            #
+            # AttendanceSubmission.submitted_by
+            # is the actual user who submitted attendance.
+            # =================================================
+
+            marked_by_name = ""
+
+            marked_by_id = None
+
+            submitted_by = (
+                record.submission.submitted_by
+            )
+
+            if submitted_by:
+
+                marked_by_id = submitted_by.id
+
+                marked_by_name = (
+                    submitted_by.get_full_name()
+                    or submitted_by.username
+                )
+
+            # =================================================
+            # CLASS TEACHER
+            #
+            # IMPORTANT:
+            # We get this from TeacherAssignment,
+            # NOT from /classes/.
+            # =================================================
+
+            class_teacher_name = ""
+
+            class_teacher_id = None
+
+            is_class_teacher = False
+
+            if assignment:
+
+                is_class_teacher = (
+                    assignment.is_class_teacher
+                )
+
+                class_teacher = (
+                    assignment.teacher
+                )
+
+                if class_teacher:
+
+                    class_teacher_id = (
+                        class_teacher.id
+                    )
+
+                    teacher_user = (
+                        getattr(
+                            class_teacher,
+                            "user",
+                            None,
+                        )
+                    )
+
+                    if teacher_user:
+
+                        class_teacher_name = (
+                            teacher_user.get_full_name()
+                            or teacher_user.username
+                        )
+
+                    # Fallbacks
+                    if not class_teacher_name:
+
+                        if getattr(
+                            class_teacher,
+                            "teacher_name",
+                            None,
+                        ):
+
+                            class_teacher_name = (
+                                class_teacher.teacher_name
+                            )
+
+                        elif getattr(
+                            class_teacher,
+                            "employee_number",
+                            None,
+                        ):
+
+                            class_teacher_name = (
+                                class_teacher.employee_number
+                            )
+
+            # =================================================
+            # RESPONSE
+            # =================================================
 
             data.append(
                 {
@@ -1503,6 +1635,9 @@ class TeacherAttendanceHistoryView(APIView):
 
                     "date":
                         record.submission.date,
+
+                    "classroom_id":
+                        record.submission.classroom_id,
 
                     "classroom_name":
                         classroom_name,
@@ -1528,6 +1663,29 @@ class TeacherAttendanceHistoryView(APIView):
 
                     "submission_status":
                         record.submission.status,
+
+                    # ========================================
+                    # MARKED BY
+                    # ========================================
+
+                    "marked_by_id":
+                        marked_by_id,
+
+                    "marked_by_name":
+                        marked_by_name,
+
+                    # ========================================
+                    # CLASS TEACHER
+                    # ========================================
+
+                    "class_teacher_id":
+                        class_teacher_id,
+
+                    "class_teacher_name":
+                        class_teacher_name,
+
+                    "is_class_teacher":
+                        is_class_teacher,
                 }
             )
 
@@ -1535,7 +1693,6 @@ class TeacherAttendanceHistoryView(APIView):
             data,
             status=status.HTTP_200_OK,
         )
-
 
 # ============================================================
 # ATTENDANCE REPORT — ADMIN / ACADEMIC COORDINATOR
