@@ -1110,16 +1110,16 @@ class StudentProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
-        pk = self.kwargs.get("pk")  # ✅ Get ID from URL
+        pk = self.kwargs.get("pk")
 
         if pk:
-            # ✅ If ID in URL → return THAT student's profile
+            # Return the specific student by ID
             try:
                 return StudentProfile.objects.get(pk=pk)
             except StudentProfile.DoesNotExist:
                 raise NotFound("Student profile not found.")
         else:
-            # ✅ No ID → return CURRENT logged-in user's profile
+            # Return the logged-in student's own profile
             try:
                 return StudentProfile.objects.get(user=self.request.user)
             except StudentProfile.DoesNotExist:
