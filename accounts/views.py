@@ -1104,7 +1104,6 @@ class ParentProfileView(
 # ============================================================
 # STUDENT PROFILE
 # ============================================================
-
 class StudentProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = StudentProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -1113,18 +1112,17 @@ class StudentProfileView(generics.RetrieveUpdateAPIView):
         pk = self.kwargs.get("pk")
 
         if pk:
-            # Return the specific student by ID
+            # ✅ LOOKUP BY USER ID — matches what your frontend sends!
             try:
-                return StudentProfile.objects.get(pk=pk)
+                return StudentProfile.objects.get(user__pk=pk)
             except StudentProfile.DoesNotExist:
-                raise NotFound("Student profile not found.")
+                raise NotFound("Student profile not found for this user.")
         else:
-            # Return the logged-in student's own profile
+            # Return logged-in user's own profile
             try:
                 return StudentProfile.objects.get(user=self.request.user)
             except StudentProfile.DoesNotExist:
                 raise NotFound("Student profile not found.")
-
 
 # ============================================================
 # LIST ALL PARENTS
