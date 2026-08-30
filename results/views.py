@@ -400,7 +400,7 @@ class ResultViewSet(viewsets.ModelViewSet):
 
     permission_classes = [
         IsAuthenticated,
-        IsAssignedTeacher,
+        IsTeacherOrAcademicCoordinator,
     ]
 
     # =================================================
@@ -477,6 +477,17 @@ class ResultViewSet(viewsets.ModelViewSet):
 
         return super().get_permissions()
 
+    def get_queryset(self):
+        user = self.request.user
+        # ✅ Coordinator & Super Admin see ALL results
+        if getattr(user, "role", None) in ["ACADEMIC_COORDINATOR", "SUPER_ADMIN"]:
+            return Result.objects.select_related(
+                "student", "submission", "submission__assessment",
+                "submission__assessment__subject", "submission__assessment__classroom", "grade"
+            ).all()
+        # Teachers see only their assigned results
+        return super().get_queryset()
+    
     # =================================================
     # UPDATE
     # =================================================
