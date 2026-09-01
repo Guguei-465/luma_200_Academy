@@ -140,7 +140,7 @@ urlpatterns = [
     ),
 
     path(
-        "teacher-profiles/",
+        "teacher-profile/",
         TeacherProfileView.as_view(),
         name="teacher-profile",
     ),
