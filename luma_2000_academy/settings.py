@@ -49,7 +49,6 @@ CORS_ALLOWED_ORIGINS = [
     "https://ryacksonfungo.alwaysdata.net",
 
     # Vercel frontends
-    "https://luma-git-main-guguei-465s-projects.vercel.app/",
     "https://luma-six-xi.vercel.app",
     "https://school-management-system-chi-eight.vercel.app",
 ]
