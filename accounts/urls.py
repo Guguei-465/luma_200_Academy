@@ -140,7 +140,7 @@ urlpatterns = [
     ),
 
     path(
-        "teacher-profile/",
+        "teacher-profiles/",
         TeacherProfileView.as_view(),
         name="teacher-profile",
     ),
@@ -158,7 +158,7 @@ urlpatterns = [
     ),
 
     path(
-        "student-profile/",
+        "student-profilesmoan/",
         StudentProfileView.as_view(),
         name="student-profile",
     ),
