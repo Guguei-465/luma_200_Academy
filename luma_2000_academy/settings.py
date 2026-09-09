@@ -53,13 +53,10 @@ CORS_ALLOWED_ORIGINS = [
     "https://school-management-system-chi-eight.vercel.app",
 ]
 
-<<<<<<< HEAD
+
 CSRF_TRUSTED_ORIGINS=[
     "https://luma-six-ix.vercel.app",
 ]
-
-=======
->>>>>>> 9802ca1c15372bee759ee942cab8f1e35fce31a7
 CORS_ALLOW_CREDENTIALS = True
 
 # Do NOT enable this together with CORS_ALLOWED_ORIGINS
