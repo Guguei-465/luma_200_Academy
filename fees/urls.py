@@ -14,79 +14,35 @@ from .views import (
 
 router = DefaultRouter()
 
-# =====================================================
-# FEE STRUCTURES
-# =====================================================
+# Fee Structures
 router.register(
     r"fee-structures",
     FeeStructureViewSet,
     basename="fee-structure",
 )
 
-# =====================================================
-# STUDENT FEES — includes list + summary action
-# =====================================================
+# Student Fees
 router.register(
     r"student-fees",
     StudentFeeViewSet,
     basename="student-fee",
 )
 
-# =====================================================
-# PAYMENTS
-# =====================================================
+# Payments
 router.register(
     r"payments",
     FeePaymentViewSet,
     basename="fee-payment",
 )
 
-# =====================================================
-# URL PATTERNS
-# =====================================================
 urlpatterns = [
-    # DARAJA TOKEN
-    path(
-        "daraja/token/",
-        DarajaTokenAPIView.as_view(),
-        name="daraja-token",
-    ),
-
-    # STK PUSH
-    path(
-        "payments/stk-push/",
-        StkPushAPIView.as_view(),
-        name="stk-push",
-    ),
-
-    # ACCOUNTANT DASHBOARD
-    path(
-        "dashboard/",
-        AccountantDashboardAPIView.as_view(),
-        name="accountant-dashboard",
-    ),
-
-    # INDIVIDUAL STUDENT FEE DASHBOARD
-    path(
-        "student/<int:student_id>/",
-        StudentFeeDashboardAPIView.as_view(),
-        name="student-fee-dashboard",
-    ),
-
-    # MPESA CALLBACK
-    path(
-        "mpesa/callback/",
-        MpesaCallbackAPIView.as_view(),
-        name="mpesa-callback",
-    ),
-
-    # RECEIPT BY NUMBER
-    path(
-        "receipt/<str:receipt_number>/",
-        ReceiptByNumberAPIView.as_view(),
-        name="receipt-by-number",
-    ),
-
-    # ROUTER ENDPOINTS
+    path("daraja/token/", DarajaTokenAPIView.as_view(), name="daraja-token"),
+    path("payments/stk-push/", StkPushAPIView.as_view(), name="stk-push"),
+    path("dashboard/", AccountantDashboardAPIView.as_view(), name="accountant-dashboard"),
+    path("student/<int:student_id>/", StudentFeeDashboardAPIView.as_view(), name="student-fee-dashboard"),
+    path("mpesa/callback/", MpesaCallbackAPIView.as_view(), name="mpesa-callback"),
+    path("receipt/<str:receipt_number>/", ReceiptByNumberAPIView.as_view(), name="receipt-by-number"),
+    
+    # Auto-generated router endpoints
     path("", include(router.urls)),
 ]
