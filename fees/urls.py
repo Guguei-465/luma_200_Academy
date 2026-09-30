@@ -87,6 +87,6 @@ urlpatterns = [
         name="receipt-by-number",
     ),
 
-    # ROUTER ENDPOINTS (includes summary action)
+    # ROUTER ENDPOINTS
     path("", include(router.urls)),
 ]
